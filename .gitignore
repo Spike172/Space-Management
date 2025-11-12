@@ -1,0 +1,11 @@
+# Node / React
+space-frontend/node_modules/
+space-frontend/dist/
+
+# Python / FastAPI
+venv/
+__pycache__/
+
+# Environment / system
+.env
+.DS_Store
