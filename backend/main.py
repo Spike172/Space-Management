@@ -1,26 +1,35 @@
-# backend/main.py
-from fastapi import FastAPI
+from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+import pandas as pd
+from io import BytesIO
 
 app = FastAPI()
 
-# Allow frontend requests (important!)
+# Allow frontend access
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # for testing; restrict later
+    allow_origins=["*"],  # Replace with your frontend URL on Render later
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+data_summary = []
+
+@app.post("/upload")
+async def upload_excel(file: UploadFile = File(...)):
+    contents = await file.read()
+    df = pd.read_excel(BytesIO(contents))
+
+    # Expect columns: Room | Area | Usage
+    grouped = df.groupby("Usage")["Area"].sum().reset_index()
+    grouped.rename(columns={"Area": "value", "Usage": "name"}, inplace=True)
+
+    global data_summary
+    data_summary = grouped.to_dict(orient="records")
+
+    return {"message": "File processed", "summary": data_summary}
+
 @app.get("/spaces/summary")
 def get_summary():
-    return [
-        {"name": "Occupied", "value": 65},
-        {"name": "Available", "value": 25},
-        {"name": "Reserved", "value": 10},
-    ]
-
-@app.get("/")
-def home():
-    return {"message": "Backend running!"}
+    return data_summary or [{"name": "No data yet", "value": 0}]
