@@ -1,37 +1,34 @@
-import { useState } from 'react'
-import axios from 'axios'
+import { useState } from "react";
+import api from "../api/apiClient";
 
 export default function FileUploader() {
-  const [file, setFile] = useState(null)
-  const [status, setStatus] = useState('')
+  const [file, setFile] = useState(null);
+  const [message, setMessage] = useState("");
 
-  const handleFile = (e) => setFile(e.target.files[0])
-
-  const uploadFile = async () => {
-    if (!file) return setStatus('Pick a file first')
-    const form = new FormData()
-    form.append('file', file)
-    setStatus('Uploading...')
+  const handleUpload = async () => {
+    if (!file) return alert("Please select a file first");
+    const formData = new FormData();
+    formData.append("file", file);
     try {
-      const res = await axios.post('/etl/upload', form, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })
-      setStatus(`Upload complete: ${res.data?.message || 'OK'}`)
+      const res = await api.post("/upload", formData);
+      setMessage(res.data.message);
     } catch (err) {
-      setStatus(`Upload failed: ${err.message}`)
+      console.error(err);
+      setMessage("Upload failed.");
     }
-  }
+  };
 
   return (
-    <div className="p-4 bg-white rounded shadow">
-      <input type="file" onChange={handleFile} accept=".csv,.xlsx,.xml" />
+    <div className="p-6 flex flex-col items-center">
+      <h2 className="text-2xl mb-4 font-semibold">Upload Space Data</h2>
+      <input type="file" onChange={(e) => setFile(e.target.files[0])} />
       <button
-        onClick={uploadFile}
-        className="mt-3 px-4 py-2 bg-blue-600 text-white rounded"
+        onClick={handleUpload}
+        className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
       >
         Upload
       </button>
-      <p className="mt-2 text-gray-700">{status}</p>
+      <p className="mt-3">{message}</p>
     </div>
-  )
+  );
 }
