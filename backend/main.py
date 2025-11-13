@@ -8,10 +8,18 @@ app = FastAPI()
 # Allow frontend access
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Replace with your frontend URL on Render later
+    allow_origins=[
+        "https://spike172.github.io", # frontend root access
+        "https://spike172.github.io/Space-Management", # Frontend access
+        "https://space-management-api.onrender.com",
+        "http://localhost:5173",       # For local testing
+        "http://localhost:3000",
+    ],
+    allow_origin_regex=".*",   # ⭐ FIXES Render CORS EDGE CASES
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],       # ⭐ needed for some browsers
 )
 
 data_summary = []
