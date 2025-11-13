@@ -1,9 +1,7 @@
 import axios from 'axios'
 
-const baseURL = import.meta.env.VITE_API_URL || '/api'
-
 const api = axios.create({
-  baseURL,
+  baseURL: 'https://space-management-api.onrender.com/',
   timeout: 15000,
   headers: { 'Content-Type': 'application/json' },
 })
