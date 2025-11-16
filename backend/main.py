@@ -26,18 +26,21 @@ data_summary = []
 
 @app.post("/upload")
 async def upload_excel(file: UploadFile = File(...)):
-    contents = await file.read()
-    df = pd.read_excel(BytesIO(contents))
+    print("UPLOAD RECEIVED:", file.filename)
 
-    # Expect columns: Room | Area | Usage
+    try:
+        contents = await file.read()
+        df = pd.read_excel(BytesIO(contents))
+        print("DATAFRAME LOADED:", df.head())
+    except Exception as e:
+        print("❌ EXCEL PARSE ERROR:", e)
+        return {"error": str(e)}
+
     grouped = df.groupby("Usage")["Area"].sum().reset_index()
     grouped.rename(columns={"Area": "value", "Usage": "name"}, inplace=True)
 
     global data_summary
     data_summary = grouped.to_dict(orient="records")
 
+    print("SUMMARY SAVED:", data_summary)
     return {"message": "File processed", "summary": data_summary}
-
-@app.get("/spaces/summary")
-def get_summary():
-    return data_summary or [{"name": "No data yet", "value": 0}]
