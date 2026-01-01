@@ -10,13 +10,11 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://spike172.github.io", # frontend root access
-        "https://spike172.github.io/Space-Management", # Frontend access
         "https://space-management-api.onrender.com",
         "http://localhost:5173",       # For local testing
         "http://localhost:3000",
     ],
-    allow_origin_regex=".*",   # ⭐ FIXES Render CORS EDGE CASES
-    allow_credentials=True,
+    allow_credentials=False,  # 🔥 MUST be False
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"],       # ⭐ needed for some browsers
@@ -27,8 +25,9 @@ data_summary = []
 @app.post("/upload")
 async def upload_excel(file: UploadFile = File(...)):
     contents = await file.read()
-    df = pd.read_excel(BytesIO(contents))
 
+    df = pd.read_excel(BytesIO(contents), engine="openpyxl")
+    df = df.dropna(how="all")
     df.columns = [c.strip().lower() for c in df.columns]
 
     area_cols = [c for c in df.columns if "area" in c]
@@ -43,24 +42,13 @@ async def upload_excel(file: UploadFile = File(...)):
     area_col = area_cols[0]
     usage_col = usage_cols[0]
 
-    grouped = (
-        df.groupby(usage_col)[area_col]
-        .sum()
-        .reset_index()
-    )
+    df[area_col] = pd.to_numeric(df[area_col], errors="coerce")
+    df = df.dropna(subset=[area_col, usage_col])
 
-    grouped.rename(
-        columns={
-            usage_col: "name",
-            area_col: "value"
-        },
-        inplace=True
-    )
+    grouped = df.groupby(usage_col)[area_col].sum().reset_index()
+    grouped.rename(columns={usage_col: "name", area_col: "value"}, inplace=True)
 
     global data_summary
     data_summary = grouped.to_dict(orient="records")
 
-    return {
-        "message": "File processed successfully",
-        "summary": data_summary
-    }
+    return {"message": "File processed successfully", "summary": data_summary}
