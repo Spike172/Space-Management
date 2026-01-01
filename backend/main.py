@@ -29,18 +29,19 @@ async def upload_excel(file: UploadFile = File(...)):
     contents = await file.read()
     df = pd.read_excel(BytesIO(contents))
 
-    # Normalize column names
     df.columns = [c.strip().lower() for c in df.columns]
 
-    # Try to detect area column
-    area_col = next(
-        c for c in df.columns if "area" in c
-    )
+    area_cols = [c for c in df.columns if "area" in c]
+    usage_cols = [c for c in df.columns if "use" in c or "type" in c or "class" in c]
 
-    # Try to detect usage / classification column
-    usage_col = next(
-        c for c in df.columns if "use" in c or "type" in c or "class" in c
-    )
+    if not area_cols or not usage_cols:
+        return {
+            "error": "Could not detect required columns",
+            "columns_found": df.columns.tolist()
+        }
+
+    area_col = area_cols[0]
+    usage_col = usage_cols[0]
 
     grouped = (
         df.groupby(usage_col)[area_col]
