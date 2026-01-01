@@ -26,21 +26,40 @@ data_summary = []
 
 @app.post("/upload")
 async def upload_excel(file: UploadFile = File(...)):
-    print("UPLOAD RECEIVED:", file.filename)
+    contents = await file.read()
+    df = pd.read_excel(BytesIO(contents))
 
-    try:
-        contents = await file.read()
-        df = pd.read_excel(BytesIO(contents))
-        print("DATAFRAME LOADED:", df.head())
-    except Exception as e:
-        print("❌ EXCEL PARSE ERROR:", e)
-        return {"error": str(e)}
+    # Normalize column names
+    df.columns = [c.strip().lower() for c in df.columns]
 
-    grouped = df.groupby("Usage")["Area"].sum().reset_index()
-    grouped.rename(columns={"Area": "value", "Usage": "name"}, inplace=True)
+    # Try to detect area column
+    area_col = next(
+        c for c in df.columns if "area" in c
+    )
+
+    # Try to detect usage / classification column
+    usage_col = next(
+        c for c in df.columns if "use" in c or "type" in c or "class" in c
+    )
+
+    grouped = (
+        df.groupby(usage_col)[area_col]
+        .sum()
+        .reset_index()
+    )
+
+    grouped.rename(
+        columns={
+            usage_col: "name",
+            area_col: "value"
+        },
+        inplace=True
+    )
 
     global data_summary
     data_summary = grouped.to_dict(orient="records")
 
-    print("SUMMARY SAVED:", data_summary)
-    return {"message": "File processed", "summary": data_summary}
+    return {
+        "message": "File processed successfully",
+        "summary": data_summary
+    }
