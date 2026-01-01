@@ -22,33 +22,42 @@ app.add_middleware(
 
 data_summary = []
 
+from fastapi import HTTPException
+
 @app.post("/upload")
 async def upload_excel(file: UploadFile = File(...)):
-    contents = await file.read()
+    try:
+        contents = await file.read()
+        df = pd.read_excel(BytesIO(contents), engine="openpyxl")
+        df = df.dropna(how="all")
 
-    df = pd.read_excel(BytesIO(contents), engine="openpyxl")
-    df = df.dropna(how="all")
-    df.columns = [c.strip().lower() for c in df.columns]
+        df.columns = [str(c).strip().lower() for c in df.columns]
 
-    area_cols = [c for c in df.columns if "area" in c]
-    usage_cols = [c for c in df.columns if "use" in c or "type" in c or "class" in c]
+        area_cols = [c for c in df.columns if "area" in c]
+        usage_cols = [c for c in df.columns if "use" in c or "type" in c or "class" in c]
 
-    if not area_cols or not usage_cols:
-        return {
-            "error": "Could not detect required columns",
-            "columns_found": df.columns.tolist()
-        }
+        if not area_cols or not usage_cols:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "Could not detect required columns",
+                    "columns_found": df.columns.tolist()
+                }
+            )
 
-    area_col = area_cols[0]
-    usage_col = usage_cols[0]
+        area_col = area_cols[0]
+        usage_col = usage_cols[0]
 
-    df[area_col] = pd.to_numeric(df[area_col], errors="coerce")
-    df = df.dropna(subset=[area_col, usage_col])
+        df[area_col] = pd.to_numeric(df[area_col], errors="coerce")
+        df = df.dropna(subset=[area_col, usage_col])
 
-    grouped = df.groupby(usage_col)[area_col].sum().reset_index()
-    grouped.rename(columns={usage_col: "name", area_col: "value"}, inplace=True)
+        grouped = df.groupby(usage_col)[area_col].sum().reset_index()
+        grouped.rename(columns={usage_col: "name", area_col: "value"}, inplace=True)
 
-    global data_summary
-    data_summary = grouped.to_dict(orient="records")
+        global data_summary
+        data_summary = grouped.to_dict(orient="records")
 
-    return {"message": "File processed successfully", "summary": data_summary}
+        return {"message": "File processed successfully", "summary": data_summary}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
