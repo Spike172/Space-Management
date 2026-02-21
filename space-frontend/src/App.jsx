@@ -1,8 +1,11 @@
+import { useState } from "react";
 import { HashRouter, Routes, Route, NavLink } from "react-router-dom";
 import Dashboard from "./pages/Dashboard";
 import FileUploader from "./components/FileUploader";
 
 export default function App() {
+  const [summaryData, setSummaryData] = useState([]);
+
   const navItemClass = ({ isActive }) =>
     `px-3 py-2 rounded-md text-sm font-medium ${
       isActive
@@ -27,8 +30,8 @@ export default function App() {
 
         <main className="max-w-4xl mx-auto mt-8 p-4">
           <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/upload" element={<FileUploader />} />
+            <Route path="/" element={<Dashboard data={summaryData} />} />
+            <Route path="/upload" element={<FileUploader onUpload={setSummaryData} />} />
           </Routes>
         </main>
 

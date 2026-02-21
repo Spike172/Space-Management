@@ -2,20 +2,25 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import api from "../api/apiClient";
 
-export default function FileUploader() {
+export default function FileUploader({ onUpload }) {
   const [file, setFile] = useState(null);
   const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const handleUpload = async () => {
     if (!file) return alert("Please select a file first");
     const formData = new FormData();
     formData.append("file", file);
     try {
+      setLoading(true);
       const res = await api.post("/upload", formData);
-      setMessage(res.data.message);
+      onUpload(res.data.summary); // pass data up to App
+      setMessage("✅ " + res.data.message);
     } catch (err) {
-      console.error(err)
-      setMessage("❌ Upload failed.");
+      console.error(err);
+      setMessage("❌ Upload failed. Check the console for details.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -34,19 +39,27 @@ export default function FileUploader() {
 
       <input
         type="file"
+        accept=".xlsx,.xls"
         className="border border-gray-300 rounded-md px-3 py-2 w-full mb-4 bg-gray-50"
         onChange={(e) => setFile(e.target.files[0])}
       />
 
       <button
         onClick={handleUpload}
-        className="px-6 py-2 bg-gray-800 text-white rounded-md hover:bg-gray-700 transition"
+        disabled={loading}
+        className="px-6 py-2 bg-gray-800 text-white rounded-md hover:bg-gray-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        Upload File
+        {loading ? "Uploading..." : "Upload File"}
       </button>
 
       {message && (
         <p className="mt-4 text-gray-700 font-medium">{message}</p>
+      )}
+
+      {loading && (
+        <p className="mt-2 text-gray-400 text-sm">
+          This may take a moment if the server is waking up...
+        </p>
       )}
     </motion.div>
   );

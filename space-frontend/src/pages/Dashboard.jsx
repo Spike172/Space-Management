@@ -1,15 +1,7 @@
-import { useEffect, useState } from "react";
 import { PieChart, Pie, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { motion } from "framer-motion";
-import api from "../api/apiClient";
 
-export default function Dashboard() {
-  const [data, setData] = useState([]);
-
-  useEffect(() => {
-    api.get("/spaces/summary").then((res) => setData(res.data));
-  }, []);
-
+export default function Dashboard({ data }) {
   const colors = ["#9CA3AF", "#6B7280", "#4B5563", "#374151", "#1F2937"];
 
   return (
