@@ -2,12 +2,13 @@ import { useState } from "react";
 import { HashRouter, Routes, Route, NavLink } from "react-router-dom";
 import Dashboard from "./pages/Dashboard";
 import FileUploader from "./components/FileUploader";
+import Editor from "./pages/Editor";
 
 export default function App() {
   const [summaryData, setSummaryData] = useState([]);
 
   const navItemClass = ({ isActive }) =>
-    `px-3 py-2 rounded-md text-sm font-medium ${
+    `px-3 py-2 rounded-md text-sm font-medium transition ${
       isActive
         ? "bg-gray-700 text-white"
         : "text-gray-300 hover:bg-gray-700 hover:text-white"
@@ -19,19 +20,17 @@ export default function App() {
         <nav className="bg-gray-900 shadow-md p-4 flex justify-between items-center">
           <h1 className="text-xl font-bold text-white">🏢 Space Manager</h1>
           <div className="flex space-x-2">
-            <NavLink to="/" className={navItemClass}>
-              Dashboard
-            </NavLink>
-            <NavLink to="/upload" className={navItemClass}>
-              Upload
-            </NavLink>
+            <NavLink to="/" className={navItemClass}>Dashboard</NavLink>
+            <NavLink to="/upload" className={navItemClass}>Upload</NavLink>
+            <NavLink to="/editor" className={navItemClass}>Floor Plan</NavLink>
           </div>
         </nav>
 
-        <main className="max-w-4xl mx-auto mt-8 p-4">
+        <main className="max-w-7xl mx-auto mt-8 p-4">
           <Routes>
             <Route path="/" element={<Dashboard data={summaryData} />} />
             <Route path="/upload" element={<FileUploader onUpload={setSummaryData} />} />
+            <Route path="/editor" element={<Editor />} />
           </Routes>
         </main>
 
