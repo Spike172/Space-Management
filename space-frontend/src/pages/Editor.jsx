@@ -5,11 +5,8 @@ import { AgGridReact } from "ag-grid-react";
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-alpine.css";
 
-// Set up the PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-  "pdfjs-dist/build/pdf.worker.min.mjs",
-  import.meta.url
-).toString();
+// pdfjs v3 worker path
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
 
 const ROOM_COLORS = [
   "#93C5FD", "#86EFAC", "#FCD34D", "#F9A8D4", "#A5B4FC",
@@ -24,17 +21,17 @@ const USE_TYPES = [
 export default function Editor() {
   const [pdfImage, setPdfImage] = useState(null);
   const [stageSize, setStageSize] = useState({ width: 900, height: 600 });
-  const [tool, setTool] = useState("select"); // select | rect | polygon
+  const [tool, setTool] = useState("select");
   const [rooms, setRooms] = useState([]);
   const [drawing, setDrawing] = useState(false);
   const [currentRect, setCurrentRect] = useState(null);
   const [polygonPoints, setPolygonPoints] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [scale, setScale] = useState(1);
+  const [pdfError, setPdfError] = useState("");
   const stageRef = useRef(null);
   const containerRef = useRef(null);
 
-  // AG Grid column defs
   const columnDefs = [
     { field: "id", headerName: "ID", width: 60, editable: false },
     { field: "name", headerName: "Room Name", editable: true, flex: 1 },
@@ -49,7 +46,6 @@ export default function Editor() {
     { field: "notes", headerName: "Notes", editable: true, flex: 1 },
   ];
 
-  // Resize stage to container
   useEffect(() => {
     const obs = new ResizeObserver(() => {
       if (containerRef.current) {
@@ -63,41 +59,40 @@ export default function Editor() {
     return () => obs.disconnect();
   }, []);
 
-  // Load PDF
   const handlePdfUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    const arrayBuffer = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-    const page = await pdf.getPage(1);
-    const viewport = page.getViewport({ scale: 1.5 });
-    const canvas = document.createElement("canvas");
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
-    const ctx = canvas.getContext("2d");
-    await page.render({ canvasContext: ctx, viewport }).promise;
+    setPdfError("");
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const page = await pdf.getPage(1);
+      const viewport = page.getViewport({ scale: 1.5 });
+      const canvas = document.createElement("canvas");
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      const ctx = canvas.getContext("2d");
+      await page.render({ canvasContext: ctx, viewport }).promise;
 
-    const img = new window.Image();
-    img.src = canvas.toDataURL();
-    img.onload = () => {
-      setPdfImage(img);
-      // Scale stage to fit
-      const scaleX = stageSize.width / viewport.width;
-      setScale(Math.min(scaleX, 1));
-    };
+      const img = new window.Image();
+      img.src = canvas.toDataURL();
+      img.onload = () => {
+        setPdfImage(img);
+        const scaleX = stageSize.width / viewport.width;
+        setScale(Math.min(scaleX, 1));
+      };
+    } catch (err) {
+      console.error(err);
+      setPdfError("Failed to load PDF. Make sure it's a valid PDF file.");
+    }
   };
 
-  // Mouse handlers for drawing
   const getPointerPos = () => {
-    const stage = stageRef.current;
-    const pos = stage.getPointerPosition();
+    const pos = stageRef.current.getPointerPosition();
     return { x: pos.x / scale, y: pos.y / scale };
   };
 
-  const handleMouseDown = (e) => {
-    if (e.target !== stageRef.current && e.target.getClassName?.() === "Image") {
-      // clicking on canvas bg or image
-    }
+  const handleMouseDown = () => {
     if (tool === "rect") {
       const pos = getPointerPos();
       setCurrentRect({ x: pos.x, y: pos.y, width: 0, height: 0 });
@@ -113,11 +108,7 @@ export default function Editor() {
   const handleMouseMove = () => {
     if (tool === "rect" && drawing && currentRect) {
       const pos = getPointerPos();
-      setCurrentRect((r) => ({
-        ...r,
-        width: pos.x - r.x,
-        height: pos.y - r.y,
-      }));
+      setCurrentRect((r) => ({ ...r, width: pos.x - r.x, height: pos.y - r.y }));
     }
   };
 
@@ -146,7 +137,7 @@ export default function Editor() {
   };
 
   const finishPolygon = () => {
-    if (polygonPoints.length < 6) return; // need at least 3 points
+    if (polygonPoints.length < 6) return;
     const newRoom = {
       id: rooms.length + 1,
       type: "polygon",
@@ -195,7 +186,6 @@ export default function Editor() {
       <div className="bg-white rounded-2xl shadow-md border border-gray-200 p-4 flex flex-wrap items-center gap-3">
         <span className="font-semibold text-gray-700 mr-2">Floor Plan Editor</span>
 
-        {/* PDF Upload */}
         <label className="cursor-pointer px-4 py-2 bg-gray-800 text-white text-sm rounded-md hover:bg-gray-700 transition">
           📄 Load PDF
           <input type="file" accept=".pdf" className="hidden" onChange={handlePdfUpload} />
@@ -203,7 +193,6 @@ export default function Editor() {
 
         <div className="h-6 w-px bg-gray-300" />
 
-        {/* Tools */}
         {[
           { id: "select", label: "↖ Select" },
           { id: "rect", label: "⬜ Rectangle" },
@@ -251,6 +240,12 @@ export default function Editor() {
         </div>
       </div>
 
+      {pdfError && (
+        <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm">
+          ❌ {pdfError}
+        </div>
+      )}
+
       {/* Canvas */}
       <div className="bg-white rounded-2xl shadow-md border border-gray-200 overflow-hidden">
         <div
@@ -276,7 +271,6 @@ export default function Editor() {
             onMouseUp={handleMouseUp}
           >
             <Layer>
-              {/* PDF background */}
               {pdfImage && (
                 <KonvaImage
                   image={pdfImage}
@@ -287,7 +281,6 @@ export default function Editor() {
                 />
               )}
 
-              {/* Drawn rooms */}
               {rooms.map((room) => {
                 const isSelected = room.id === selectedId;
                 if (room.type === "rect") {
@@ -341,7 +334,6 @@ export default function Editor() {
                 return null;
               })}
 
-              {/* In-progress rectangle */}
               {currentRect && (
                 <Rect
                   x={currentRect.x}
@@ -356,7 +348,6 @@ export default function Editor() {
                 />
               )}
 
-              {/* In-progress polygon points */}
               {polygonPoints.length > 0 && (
                 <>
                   <Line
