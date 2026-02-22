@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { Stage, Layer, Image as KonvaImage, Rect, Line, Circle, Text } from "react-konva";
 import * as pdfjsLib from "pdfjs-dist";
 import { AgGridReact } from "ag-grid-react";
-import { ModuleRegistry, AllCommunityModule } from "ag-grid-community";
+import { ModuleRegistry, AllCommunityModule, themeAlpine } from "ag-grid-community";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -387,7 +387,7 @@ export default function Editor() {
           </div>
         ) : (
           <div className="w-full" style={{ height: 300 }}>
-            <AgGridReact theme="legacy"
+            <AgGridReact theme={themeAlpine}
               rowData={rooms}
               columnDefs={columnDefs}
               onCellValueChanged={onCellValueChanged}
