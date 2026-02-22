@@ -3,8 +3,6 @@ import { Stage, Layer, Image as KonvaImage, Rect, Line, Circle, Text } from "rea
 import * as pdfjsLib from "pdfjs-dist";
 import { AgGridReact } from "ag-grid-react";
 import { ModuleRegistry, AllCommunityModule } from "ag-grid-community";
-import "ag-grid-community/styles/ag-grid.css";
-import "ag-grid-community/styles/ag-theme-alpine.css";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -388,8 +386,8 @@ export default function Editor() {
             Draw rooms on the floor plan to populate this table
           </div>
         ) : (
-          <div className="ag-theme-alpine w-full" style={{ height: 300 }}>
-            <AgGridReact
+          <div className="w-full" style={{ height: 300 }}>
+            <AgGridReact theme="legacy"
               rowData={rooms}
               columnDefs={columnDefs}
               onCellValueChanged={onCellValueChanged}
