@@ -22,7 +22,7 @@ export default function Dashboard() {
 
   const loadDashboard = async () => {
     try {
-      const res = await api.get("/dashboard");
+      const res = await api.get("/spaces/summary");
       setStats(res.data);
     } catch (err) {
       console.error(err);
