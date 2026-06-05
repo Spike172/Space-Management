@@ -1,4 +1,4 @@
-name: Build and Deploy React+Vite to gh-pages
+name: Build and Deploy Subfolder React+Vite to gh-pages
 
 on:
   push:
@@ -7,6 +7,10 @@ on:
 
 permissions:
   contents: write
+
+env:
+  # ⚠️ Change this to your exact frontend folder name!
+  FRONTEND_DIR: 'space-frontend' 
 
 jobs:
   build-and-deploy:
@@ -20,15 +24,18 @@ jobs:
         with:
           node-version: 20
           cache: 'npm'
+          cache-dependency-path: './${{ env.FRONTEND_DIR }}/package-lock.json'
 
       - name: Install Dependencies
+        working-directory: ./${{ env.FRONTEND_DIR }}
         run: npm ci
 
       - name: Build Vite Project
+        working-directory: ./${{ env.FRONTEND_DIR }}
         run: npm run build
 
       - name: Deploy Compiled Files to gh-pages
         uses: JamesIves/github-pages-deploy-action@v4
         with:
-          folder: dist # Vite automatically outputs files to this folder
+          folder: ${{ env.FRONTEND_DIR }}/dist
           branch: gh-pages
