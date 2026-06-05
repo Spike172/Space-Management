@@ -14,7 +14,9 @@ export default function FileUploader({ onUpload }) {
     try {
       setLoading(true);
       const res = await api.post("/upload", formData);
-      onUpload(res.data.summary); // pass data up to App
+      if (onUpload) {
+        onUpload(res.data.summary);
+      } // pass data up to App
       setMessage("✅ " + res.data.message);
     } catch (err) {
       console.error(err);

@@ -6,14 +6,15 @@ from io import BytesIO
 
 app = FastAPI()
 
+#        "https://spike172.github.io",
+#        "https://space-management-api.onrender.com",
+#        "http://localhost:5173",
+#        "http://localhost:3000",
+#        ""
+    
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://spike172.github.io",
-        "https://space-management-api.onrender.com",
-        "http://localhost:5173",
-        "http://localhost:3000",
-    ],
+    allow_origins=["*"],
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
