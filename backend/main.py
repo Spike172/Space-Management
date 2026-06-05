@@ -396,3 +396,7 @@ def get_shared():
 @app.get("/spaces/toprooms")
 def get_top_rooms():
     return build_top_rooms()
+
+@app.get("/debug/spaces")
+def debug_spaces():
+    return space_inventory[:20]
