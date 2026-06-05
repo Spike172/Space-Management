@@ -4,107 +4,395 @@ from starlette.responses import Response
 import pandas as pd
 from io import BytesIO
 
-app = FastAPI()
+app = FastAPI(title="Space Management API")
 
-#        "https://spike172.github.io",
-#        "https://space-management-api.onrender.com",
-#        "http://localhost:5173",
-#        "http://localhost:3000",
-#        ""
-    
+# =====================================================
+# CORS
+# =====================================================
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
-    expose_headers=["*"],
 )
 
-# Explicit OPTIONS handler to prevent 405 on preflight requests
 @app.options("/{rest_of_path:path}")
 async def preflight_handler(rest_of_path: str):
     return Response(status_code=200)
 
+# =====================================================
+# In-Memory Storage
+# =====================================================
+
+space_inventory = []
+
+# =====================================================
+# Utilities
+# =====================================================
 
 def find_header_row(df_raw):
-    """Scan rows to find the one that looks like a real header (most non-null values)."""
-    best_row = 0
-    best_count = 0
-    for i, row in df_raw.iterrows():
-        non_null = row.notna().sum()
-        if non_null > best_count:
-            best_count = non_null
-            best_row = i
-    return best_row
+    """
+    Find row containing SQ FT header.
+    """
 
+    for idx, row in df_raw.iterrows():
+
+        values = [
+            str(v).strip().lower()
+            for v in row.values
+            if pd.notna(v)
+        ]
+
+        if "sq ft" in values:
+            return idx
+
+    return 0
+
+
+def normalize_column_name(col):
+    return str(col).strip().lower()
+
+
+# =====================================================
+# Upload Endpoint
+# =====================================================
 
 @app.post("/upload")
 async def upload_excel(file: UploadFile = File(...)):
+
+    global space_inventory
+
     try:
+
         contents = await file.read()
 
-        # Read raw first without assuming headers
-        df_raw = pd.read_excel(BytesIO(contents), engine="openpyxl", header=None)
-        df_raw = df_raw.dropna(how="all")
+        workbook = pd.ExcelFile(BytesIO(contents))
 
-        # Find the real header row
-        header_row_idx = find_header_row(df_raw)
+        all_rooms = []
 
-        # Re-read using that row as the header
-        df = pd.read_excel(
-            BytesIO(contents),
-            engine="openpyxl",
-            header=header_row_idx,
-        )
-        df = df.dropna(how="all")
-        df.columns = [str(c).strip().lower() for c in df.columns]
+        for sheet_name in workbook.sheet_names:
 
-        # Drop unnamed columns from messy top rows
-        df = df.loc[:, ~df.columns.str.startswith("unnamed")]
+            # Skip obvious template sheets
+            if "template" in sheet_name.lower():
+                continue
 
-        # Detect area column
-        area_cols = [c for c in df.columns if any(k in c for k in [
-            "area", "sq ft", "sqft", "square", "size", "gsf", "nsf"
-        ])]
+            try:
 
-        # Detect usage/grouping column
-        usage_cols = [c for c in df.columns if any(k in c for k in [
-            "use", "type", "class", "room name", "dept", "department", "space"
-        ])]
+                raw_df = pd.read_excel(
+                    BytesIO(contents),
+                    sheet_name=sheet_name,
+                    header=None
+                )
 
-        if not area_cols or not usage_cols:
-            raise HTTPException(
-                status_code=400,
-                detail={
-                    "error": "Could not detect required columns",
-                    "columns_found": df.columns.tolist(),
-                    "tip": "Need a column with area/sq ft and a column with room name/department/use type"
-                }
-            )
+                raw_df = raw_df.dropna(how="all")
 
-        area_col = area_cols[0]
-        usage_col = usage_cols[0]
+                header_row = find_header_row(raw_df)
 
-        df[area_col] = pd.to_numeric(df[area_col], errors="coerce")
-        df = df.dropna(subset=[area_col, usage_col])
-        df = df[df[area_col] > 0]  # drop zero/negative areas
+                df = pd.read_excel(
+                    BytesIO(contents),
+                    sheet_name=sheet_name,
+                    header=header_row
+                )
 
-        grouped = df.groupby(usage_col)[area_col].sum().reset_index()
-        grouped.rename(columns={usage_col: "name", area_col: "value"}, inplace=True)
-        grouped = grouped.sort_values("value", ascending=False)
+                df.columns = [
+                    normalize_column_name(c)
+                    for c in df.columns
+                ]
 
-        summary = grouped.to_dict(orient="records")
+                df = df.loc[
+                    :,
+                    ~df.columns.str.startswith("unnamed")
+                ]
+
+                df = df.dropna(how="all")
+
+                if "sq ft" not in df.columns:
+                    continue
+
+                df["sq ft"] = pd.to_numeric(
+                    df["sq ft"],
+                    errors="coerce"
+                )
+
+                df = df.dropna(subset=["sq ft"])
+
+                for _, row in df.iterrows():
+
+                    room = {
+                        "building": str(
+                            row.get("building", "")
+                        ).strip(),
+
+                        "floor": str(
+                            row.get("level #", "")
+                        ).strip(),
+
+                        "dept_location": str(
+                            row.get("dept location", "")
+                        ).strip(),
+
+                        "room_name": str(
+                            row.get("room name", "")
+                        ).strip(),
+
+                        "room_number": str(
+                            row.get(
+                                "room # on plan set",
+                                ""
+                            )
+                        ).strip(),
+
+                        "door_number": str(
+                            row.get(
+                                "room # on door/door frame",
+                                ""
+                            )
+                        ).strip(),
+
+                        "occupant": str(
+                            row.get(
+                                "name of office occupant on placard",
+                                ""
+                            )
+                        ).strip(),
+
+                        "department": str(
+                            row.get(
+                                "department",
+                                "Unassigned"
+                            )
+                        ).strip(),
+
+                        "department_head": str(
+                            row.get(
+                                "department head",
+                                ""
+                            )
+                        ).strip(),
+
+                        "cost_center": str(
+                            row.get(
+                                "cost center",
+                                ""
+                            )
+                        ).strip(),
+
+                        "shared": str(
+                            row.get(
+                                "shared",
+                                "N"
+                            )
+                        ).strip(),
+
+                        "area": float(
+                            row.get("sq ft", 0)
+                        ),
+                    }
+
+                    all_rooms.append(room)
+
+            except Exception as sheet_error:
+                print(
+                    f"Skipping sheet {sheet_name}: "
+                    f"{sheet_error}"
+                )
+
+        space_inventory = all_rooms
 
         return {
             "message": "File processed successfully",
-            "summary": summary,
-            "area_column": area_col,
-            "usage_column": usage_col,
-            "row_count": len(df),
+            "rooms_loaded": len(space_inventory),
+            "summary": build_department_summary()
         }
 
-    except HTTPException:
-        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
+
+# =====================================================
+# Summary Helpers
+# =====================================================
+
+def build_department_summary():
+
+    if not space_inventory:
+        return []
+
+    df = pd.DataFrame(space_inventory)
+
+    grouped = (
+        df.groupby("department")["area"]
+        .sum()
+        .reset_index()
+    )
+
+    grouped.rename(
+        columns={
+            "department": "name",
+            "area": "value"
+        },
+        inplace=True
+    )
+
+    grouped = grouped.sort_values(
+        "value",
+        ascending=False
+    )
+
+    return grouped.to_dict(orient="records")
+
+
+def build_building_summary():
+
+    if not space_inventory:
+        return []
+
+    df = pd.DataFrame(space_inventory)
+
+    grouped = (
+        df.groupby("building")["area"]
+        .sum()
+        .reset_index()
+    )
+
+    grouped.rename(
+        columns={
+            "building": "name",
+            "area": "value"
+        },
+        inplace=True
+    )
+
+    return grouped.to_dict(orient="records")
+
+
+def build_floor_summary():
+
+    if not space_inventory:
+        return []
+
+    df = pd.DataFrame(space_inventory)
+
+    grouped = (
+        df.groupby("floor")["area"]
+        .sum()
+        .reset_index()
+    )
+
+    grouped.rename(
+        columns={
+            "floor": "name",
+            "area": "value"
+        },
+        inplace=True
+    )
+
+    return grouped.to_dict(orient="records")
+
+
+def build_shared_summary():
+
+    if not space_inventory:
+        return []
+
+    df = pd.DataFrame(space_inventory)
+
+    grouped = (
+        df.groupby("shared")["area"]
+        .sum()
+        .reset_index()
+    )
+
+    grouped.rename(
+        columns={
+            "shared": "name",
+            "area": "value"
+        },
+        inplace=True
+    )
+
+    return grouped.to_dict(orient="records")
+
+
+def build_top_rooms():
+
+    if not space_inventory:
+        return []
+
+    df = pd.DataFrame(space_inventory)
+
+    df = df.sort_values(
+        "area",
+        ascending=False
+    )
+
+    return (
+        df[
+            [
+                "room_name",
+                "department",
+                "building",
+                "floor",
+                "area"
+            ]
+        ]
+        .head(25)
+        .to_dict(orient="records")
+    )
+
+# =====================================================
+# API Endpoints
+# =====================================================
+
+@app.get("/")
+def root():
+    return {
+        "status": "online",
+        "rooms_loaded": len(space_inventory)
+    }
+
+
+@app.get("/spaces")
+def get_spaces():
+    return space_inventory
+
+
+@app.get("/spaces/summary")
+def get_department_summary():
+
+    summary = build_department_summary()
+
+    if not summary:
+        return [
+            {
+                "name": "No data yet",
+                "value": 0
+            }
+        ]
+
+    return summary
+
+
+@app.get("/spaces/buildings")
+def get_buildings():
+    return build_building_summary()
+
+
+@app.get("/spaces/floors")
+def get_floors():
+    return build_floor_summary()
+
+
+@app.get("/spaces/shared")
+def get_shared():
+    return build_shared_summary()
+
+
+@app.get("/spaces/toprooms")
+def get_top_rooms():
+    return build_top_rooms()
