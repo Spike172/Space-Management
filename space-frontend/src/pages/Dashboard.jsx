@@ -135,27 +135,49 @@ export default function Dashboard() {
 
       {/* Buildings */}
 
-      <div className="bg-white p-6 rounded-2xl shadow">
-        <h2 className="text-xl font-semibold mb-4">
-          Area by Building
-        </h2>
+      {stats.buildings.length > 1 ? (
+        <div className="bg-white p-6 rounded-2xl shadow">
+          <h2 className="text-xl font-semibold mb-4">
+            Area by Building
+          </h2>
 
-        <div className="h-[400px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={stats.buildings}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis />
-              <Tooltip />
+          <div className="h-[400px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={stats.buildings}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" />
+                <YAxis />
+                <Tooltip />
 
-              <Bar
-                dataKey="value"
-                fill="#6B7280"
-              />
-            </BarChart>
-          </ResponsiveContainer>
+                <Bar
+                  dataKey="value"
+                  fill="#6B7280"
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="bg-white p-6 rounded-2xl shadow">
+          <h2 className="text-xl font-semibold mb-2">
+            Building Summary
+          </h2>
+
+          <p className="text-gray-500">
+            Uploaded inventory contains one building:
+          </p>
+
+          <p className="text-2xl font-bold mt-2">
+            {stats.buildings[0]?.name}
+          </p>
+
+          <p className="text-gray-600">
+            {Math.round(
+              stats.buildings[0]?.value || 0
+            ).toLocaleString()} sq ft
+          </p>
+        </div>
+      )}
 
       {/* Floors */}
 
