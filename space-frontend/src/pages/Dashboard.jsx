@@ -22,8 +22,9 @@ export default function Dashboard() {
 
   const loadDashboard = async () => {
     try {
-      const res = await api.get("/spaces/summary");
+      const res = await api.get("/dashboard");
       setStats(res.data);
+      console.log(res.data);
     } catch (err) {
       console.error(err);
     }
@@ -53,7 +54,7 @@ export default function Dashboard() {
         <div className="bg-white p-6 rounded-2xl shadow">
           <p className="text-gray-500 text-sm">Total Area</p>
           <h2 className="text-3xl font-bold">
-            {Math.round(stats.total_area).toLocaleString()}
+            {Math.round(stats.area).toLocaleString()}
           </h2>
           <p className="text-gray-500">sq ft</p>
         </div>
