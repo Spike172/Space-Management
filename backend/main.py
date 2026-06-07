@@ -294,16 +294,32 @@ async def upload_excel(
                     if not department:
                         department = "Unassigned"
 
+                    floor_value = row.get("level #")
+
+                    if pd.notna(floor_value):
+                        try:
+                            floor_num = float(floor_value)
+
+                            if floor_num.is_integer():
+                                floor_value = int(floor_num)
+                            else:
+                                floor_value = floor_num
+
+                        except Exception:
+                            floor_value = clean_value(
+                                floor_value,
+                                "Unknown"
+                            )
+                    else:
+                        floor_value = "Unknown"
+
                     room = {
                         "building": clean_value(
                             row.get("building"),
                             "Unknown"
                         ),
 
-                        "floor": clean_value(
-                            row.get("level #"),
-                            "Unknown"
-                        ),
+                        "floor": floor_value,
 
                         "dept_location": dept_location,
 
@@ -445,6 +461,7 @@ def dashboard():
     )
 
     return {
+        "area": total_area,
         "total_area": total_area,
 
         "total_rooms": total_rooms,

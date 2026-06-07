@@ -7,9 +7,8 @@ export default function Inventory() {
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [departmentFilter, setDepartmentFilter] = useState("All");
-  const [sortField, setSortField] = useState("area");
-  const [sortDirection, setSortDirection] = useState("desc");
+  const [sortField, setSortField] = useState("building");
+  const [sortDirection, setSortDirection] = useState("asc");
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -32,24 +31,8 @@ export default function Inventory() {
     }
   };
 
-  const departments = useMemo(() => {
-    const values = [...new Set(
-      rooms
-        .map((r) => r.department)
-        .filter(Boolean)
-    )];
-
-    return ["All", ...values.sort()];
-  }, [rooms]);
-
   const filteredRooms = useMemo(() => {
     let result = [...rooms];
-
-    if (departmentFilter !== "All") {
-      result = result.filter(
-        (r) => r.department === departmentFilter
-      );
-    }
 
     if (search.trim()) {
       const term = search.toLowerCase();
@@ -63,15 +46,28 @@ export default function Inventory() {
     }
 
     result.sort((a, b) => {
-      const aVal = a[sortField];
-      const bVal = b[sortField];
-
-      if (typeof aVal === "number") {
+      let aVal = a[sortField];
+      let bVal = b[sortField];
+    
+      if (sortField === "floor") {
+        aVal = Number(aVal);
+        bVal = Number(bVal);
+      }
+    
+      if (sortField === "area") {
+        aVal = Number(aVal);
+        bVal = Number(bVal);
+      }
+    
+      if (
+        typeof aVal === "number" &&
+        !Number.isNaN(aVal)
+      ) {
         return sortDirection === "asc"
           ? aVal - bVal
           : bVal - aVal;
       }
-
+    
       return sortDirection === "asc"
         ? String(aVal).localeCompare(String(bVal))
         : String(bVal).localeCompare(String(aVal));
@@ -81,7 +77,6 @@ export default function Inventory() {
   }, [
     rooms,
     search,
-    departmentFilter,
     sortField,
     sortDirection,
   ]);
@@ -95,6 +90,34 @@ export default function Inventory() {
       setSortField(field);
       setSortDirection("asc");
     }
+  };
+
+  const getSortIndicator = (field) => {
+    if (sortField !== field) return "";
+  
+    return sortDirection === "asc"
+      ? " ▲"
+      : " ▼";
+  };
+
+  const formatFloor = (floor) => {
+    if (
+      floor === null ||
+      floor === undefined ||
+      floor === ""
+    ) {
+      return "-";
+    }
+  
+    const num = Number(floor);
+  
+    if (!Number.isNaN(num)) {
+      return Number.isInteger(num)
+        ? num.toString()
+        : num;
+    }
+  
+    return floor;
   };
 
   if (loading) {
@@ -168,22 +191,6 @@ export default function Inventory() {
             className="border rounded-lg px-4 py-2"
           />
 
-          <select
-            value={departmentFilter}
-            onChange={(e) =>
-              setDepartmentFilter(e.target.value)
-            }
-            className="border rounded-lg px-4 py-2"
-          >
-            {departments.map((dept) => (
-              <option
-                key={dept}
-                value={dept}
-              >
-                {dept}
-              </option>
-            ))}
-          </select>
         </div>
       </div>
 
@@ -200,7 +207,7 @@ export default function Inventory() {
                     handleSort("building")
                   }
                 >
-                  Building
+                  Building{getSortIndicator("building")}
                 </th>
 
                 <th
@@ -209,7 +216,7 @@ export default function Inventory() {
                     handleSort("floor")
                   }
                 >
-                  Floor
+                  Floor{getSortIndicator("floor")}
                 </th>
 
                 <th
@@ -218,7 +225,7 @@ export default function Inventory() {
                     handleSort("room_number")
                   }
                 >
-                  Room #
+                  Room #{getSortIndicator("room_number")}
                 </th>
 
                 <th
@@ -227,7 +234,7 @@ export default function Inventory() {
                     handleSort("room_name")
                   }
                 >
-                  Room Name
+                  Room Name{getSortIndicator("room_name")}
                 </th>
 
                 <th
@@ -236,7 +243,7 @@ export default function Inventory() {
                     handleSort("department")
                   }
                 >
-                  Department
+                  Department{getSortIndicator("department")}
                 </th>
 
                 <th
@@ -245,10 +252,15 @@ export default function Inventory() {
                     handleSort("area")
                   }
                 >
-                  Area (sq ft)
+                  Area (sq ft){getSortIndicator("area")}
                 </th>
 
-                <th className="p-3 text-left">Shared</th>
+                <th
+                  className="p-3 text-left cursor-pointer"
+                  onClick={() => handleSort("shared")}
+                >
+                  Shared{getSortIndicator("shared")}
+                </th>
               </tr>
             </thead>
 
@@ -259,7 +271,7 @@ export default function Inventory() {
                   className="border-b hover:bg-gray-50"
                 >
                   <td className="p-3">{room.building}</td>
-                  <td className="p-3">{room.floor}</td>
+                  <td className="p-3">{formatFloor(room.floor)}</td>
                   <td className="p-3">{room.room_number}</td>
                   <td className="p-3">{room.room_name}</td>
                   <td className="p-3">{room.department}</td>
