@@ -313,6 +313,18 @@ async def upload_excel(
                     else:
                         floor_value = "Unknown"
 
+                    room_number = clean_value(row.get("room # on plan set"))
+                    room_name = clean_value(row.get("room name"))
+                    building = clean_value(row.get("building"))
+
+                    # Skip summary/total rows
+
+                    if (
+                        room_number == ""
+                        and room_name == ""
+                    ):
+                        continue
+
                     room = {
                         "building": clean_value(
                             row.get("building"),
