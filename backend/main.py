@@ -289,9 +289,6 @@ async def upload_excel(
                         department = dept_location
 
                     if not department:
-                        department = room_name
-
-                    if not department:
                         department = "Unassigned"
 
                     floor_value = row.get("level #")
