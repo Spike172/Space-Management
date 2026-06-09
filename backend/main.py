@@ -2,10 +2,14 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import Response
 
+from database import init_db
+
 import pandas as pd
 from io import BytesIO
 
 app = FastAPI(title="Space Management API")
+
+init_db()
 
 # =====================================================
 # CORS
