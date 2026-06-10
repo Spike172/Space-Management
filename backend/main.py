@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import Response
 
 from database import init_db
+from pydantic import BaseModel
 
 import pandas as pd
 from io import BytesIO
@@ -32,6 +33,16 @@ async def options_handler(path: str):
 # =====================================================
 
 space_inventory = []
+
+class RegisterRequest(BaseModel):
+    username: str
+    email: str
+    password: str
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
 
 # =====================================================
 # HELPERS
