@@ -14,6 +14,7 @@ from sqlalchemy.orm import (
 )
 from datetime import datetime
 from dotenv import load_dotenv
+import uuid
 import os
 
 # =====================================================
@@ -79,6 +80,7 @@ class User(Base):
     id = Column(
         Integer,
         primary_key=True,
+        default=lambda: str(uuid.uuid4()),
         index=True,
     )
 
@@ -120,7 +122,7 @@ class Upload(Base):
     __tablename__ = "uploads"
 
     id = Column(
-        Integer,
+        String,
         primary_key=True,
         index=True,
     )
@@ -164,6 +166,11 @@ class Space(Base):
         index=True,
     )
 
+    user_id = Column(
+        String,
+        ForeignKey("users.id"),
+        nullable=False,
+    )
     building = Column(String)
     floor = Column(String)
 

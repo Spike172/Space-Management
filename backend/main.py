@@ -486,7 +486,7 @@ def register(
 
     return {
         "message": "User created",
-        "id": user.id
+        "user_id": user.id
     }
 
 @app.post("/login")
