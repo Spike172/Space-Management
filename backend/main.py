@@ -2,7 +2,7 @@ from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import Response
 
-from database import init_db
+from database import init_db, User, get_db
 from pydantic import BaseModel
 
 import pandas as pd
