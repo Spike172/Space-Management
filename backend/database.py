@@ -78,9 +78,9 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(
-        Integer,
+        String,
         primary_key=True,
-        default=lambda: str(uuid.uuid4()),
+        default=generate_uuid,
         index=True,
     )
 
@@ -114,6 +114,12 @@ class User(Base):
         cascade="all, delete",
     )
 
+    spaces = relationship(
+        "Space",
+        back_populates="owner",
+        cascade="all, delete",
+    )
+
 # =====================================================
 # UPLOADS TABLE
 # =====================================================
@@ -124,6 +130,7 @@ class Upload(Base):
     id = Column(
         String,
         primary_key=True,
+        default=generate_uuid,
         index=True,
     )
 
@@ -143,7 +150,7 @@ class Upload(Base):
     )
 
     user_id = Column(
-        Integer,
+        String,
         ForeignKey("users.id"),
         nullable=True,
     )
@@ -171,6 +178,12 @@ class Space(Base):
         ForeignKey("users.id"),
         nullable=False,
     )
+
+    owner = relationship(
+        "User",
+        back_populates="spaces",
+    )
+
     building = Column(String)
     floor = Column(String)
 
@@ -212,3 +225,6 @@ def get_db():
 
 def init_db():
     Base.metadata.create_all(bind=engine)
+
+def generate_uuid():
+    return str(uuid.uuid4())
