@@ -31,6 +31,14 @@ if not DATABASE_URL:
     )
 
 # =====================================================
+# GENERATE NEW UUIDs
+# =====================================================
+
+
+def generate_uuid():
+    return str(uuid.uuid4())
+
+# =====================================================
 # DATABASE ENGINE
 # =====================================================
 
@@ -225,6 +233,3 @@ def get_db():
 
 def init_db():
     Base.metadata.create_all(bind=engine)
-
-def generate_uuid():
-    return str(uuid.uuid4())
