@@ -6,6 +6,8 @@ import Dashboard from "./pages/Dashboard";
 import Inventory from "./pages/Inventory";
 import Upload from "./pages/Upload";
 import Editor from "./pages/Editor";
+import Login from "./pages/Login";
+import Register from "./pages/Register";
 
 export default function App() {
   const navItemClass = ({ isActive }) =>
@@ -25,21 +27,31 @@ export default function App() {
               🏢 Space Manager
             </h1>
 
-            <div className="flex flex-wrap gap-2">
-              <NavLink to="/" className={navItemClass}>
-                Dashboard
-              </NavLink>
+            <div className="flex items-center gap-4">
+              <div className="flex flex-wrap gap-2">
+                <NavLink to="/" className={navItemClass}>
+                  Dashboard
+                </NavLink>
 
-              <NavLink to="/upload" className={navItemClass}>
-                Upload
-              </NavLink>
+                <NavLink to="/upload" className={navItemClass}>
+                  Upload
+                </NavLink>
 
-              <NavLink to="/inventory" className={navItemClass}>
-                Inventory
-              </NavLink>
+                <NavLink to="/inventory" className={navItemClass}>
+                  Inventory
+                </NavLink>
 
-              <NavLink to="/editor" className={navItemClass}>
-                Floor Plan
+                <NavLink to="/editor" className={navItemClass}>
+                  Floor Plan
+                </NavLink>
+              </div>
+
+              {/* User Icon */}
+              <NavLink
+                to="/login"
+                className="w-10 h-10 rounded-full bg-gray-700 hover:bg-gray-600 flex items-center justify-center text-white transition"
+              >
+                👤
               </NavLink>
             </div>
           </div>
@@ -52,6 +64,9 @@ export default function App() {
             <Route path="/upload" element={<Upload />} />
             <Route path="/inventory" element={<Inventory />} />
             <Route path="/editor" element={<Editor />} />
+
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
           </Routes>
         </main>
 
