@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import Response
 
@@ -7,6 +7,10 @@ from pydantic import BaseModel
 
 import pandas as pd
 from io import BytesIO
+
+from sqlalchemy.orm import Session
+
+from auth import (hash_password, verify_password)
 
 app = FastAPI(title="Space Management API")
 
@@ -449,6 +453,75 @@ def shared():
 def largest_rooms():
     return top_rooms()
 
+@app.post("/register")
+def register(
+    request: RegisterRequest,
+    db: Session = Depends(get_db)
+):
+    existing_user = (
+        db.query(User)
+        .filter(
+            User.username == request.username
+        )
+        .first()
+    )
+
+    if existing_user:
+        raise HTTPException(
+            status_code=400,
+            detail="Username already exists"
+        )
+
+    user = User(
+        username=request.username,
+        email=request.email,
+        password_hash=hash_password(
+            request.password
+        )
+    )
+
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    return {
+        "message": "User created",
+        "id": user.id
+    }
+
+@app.post("/login")
+def login(
+    request: LoginRequest,
+    db: Session = Depends(get_db)
+):
+    user = (
+        db.query(User)
+        .filter(
+            User.username == request.username
+        )
+        .first()
+    )
+
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid credentials"
+        )
+
+    if not verify_password(
+        request.password,
+        user.password_hash
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid credentials"
+        )
+
+    return {
+        "message": "Login successful",
+        "user_id": user.id,
+        "username": user.username
+    }
 
 @app.get("/dashboard")
 def dashboard():
