@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import api from "../api/apiClient";
 
@@ -10,6 +10,14 @@ export default function LoginC() {
 
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+
+    if (token) {
+      navigate("/");
+    }
+  }, [navigate]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -24,6 +32,13 @@ export default function LoginC() {
         password,
       });
 
+      // Save JWT token
+      localStorage.setItem(
+        "token",
+        res.data.access_token
+      );
+
+      // Save user info
       localStorage.setItem(
         "user",
         JSON.stringify({
@@ -36,7 +51,8 @@ export default function LoginC() {
 
       setTimeout(() => {
         navigate("/");
-      }, 750);
+        window.location.reload();
+      }, 500);
     } catch (err) {
       console.error(err);
 
@@ -90,7 +106,9 @@ export default function LoginC() {
           disabled={loading}
           className="w-full bg-gray-900 text-white py-2 rounded-lg hover:bg-gray-700 disabled:opacity-50"
         >
-          {loading ? "Signing In..." : "Login"}
+          {loading
+            ? "Signing In..."
+            : "Login"}
         </button>
       </form>
 
