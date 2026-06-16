@@ -9,6 +9,7 @@ import Upload from "./pages/Upload";
 import Editor from "./pages/Editor";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import ProtectedRoute from "./components/ProtectedRoute";
 
 function Layout() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -121,35 +122,17 @@ function Layout() {
 
       <main className="max-w-7xl mx-auto p-6">
         <Routes>
-          <Route
-            path="/"
-            element={<Dashboard />}
-          />
+          <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>}/>
 
-          <Route
-            path="/upload"
-            element={<Upload />}
-          />
+          <Route path="/upload" element={<ProtectedRoute><Upload /></ProtectedRoute>}/>
 
-          <Route
-            path="/inventory"
-            element={<Inventory />}
-          />
+          <Route path="/inventory" element={<ProtectedRoute><Inventory /></ProtectedRoute>}/>
 
-          <Route
-            path="/editor"
-            element={<Editor />}
-          />
+          <Route path="/editor" element={<ProtectedRoute><Editor /></ProtectedRoute>}/>
 
-          <Route
-            path="/login"
-            element={<Login />}
-          />
+          <Route path="/login" element={<Login />}/>
 
-          <Route
-            path="/register"
-            element={<Register />}
-          />
+          <Route path="/register" element={<Register />}/>
         </Routes>
       </main>
 
