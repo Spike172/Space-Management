@@ -106,8 +106,8 @@ function Layout() {
                         </button>
                       </div>
 
-                      <div className="p-4 border-b">
-                        <p className="text-[0.5rem] text-gray-400 break-all mt-1 py-1">
+                      <div className="p-4 border-b py-1">
+                        <p className="text-[0.5rem] text-gray-400 break-all mt-1">
                           {user.user_id}
                         </p>
                       </div>
