@@ -10,7 +10,7 @@ from io import BytesIO
 
 from sqlalchemy.orm import Session
 
-from auth import (hash_password, verify_password)
+from auth import (hash_password, verify_password, create_access_token)
 
 app = FastAPI(title="Space Management API")
 
@@ -516,9 +516,18 @@ def login(
             status_code=401,
             detail="Invalid credentials"
         )
+    
+    token = create_access_token(
+        {
+            "sub": str(user.id),
+            "username": user.username,
+        }
+    )
 
     return {
         "message": "Login successful",
+        "access_token": token,
+        "token_type": "bearer",
         "user_id": user.id,
         "username": user.username
     }

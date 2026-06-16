@@ -28,6 +28,7 @@ function Layout() {
 
   const logout = () => {
     localStorage.removeItem("user");
+    localStorage.removeItem("token");
     setMenuOpen(false);
     navigate("/login");
     window.location.reload();
