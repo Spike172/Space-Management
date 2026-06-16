@@ -10,7 +10,7 @@ from io import BytesIO
 
 from sqlalchemy.orm import Session
 
-from auth import (hash_password, verify_password, create_access_token)
+from auth import (hash_password, verify_password, create_access_token, get_current_user)
 
 app = FastAPI(title="Space Management API")
 
@@ -531,6 +531,12 @@ def login(
         "user_id": user.id,
         "username": user.username
     }
+
+@app.get("/me")
+def me(
+    current_user=Depends(get_current_user)
+):
+    return current_user
 
 @app.get("/dashboard")
 def dashboard():
