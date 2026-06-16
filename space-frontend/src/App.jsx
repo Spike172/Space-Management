@@ -95,19 +95,21 @@ function Layout() {
                         <p className="font-semibold">
                           {user.username}
                         </p>
-
-                        <p className="text-xs text-gray-500 break-all mt-1">
-                          {user.user_id}
-                        </p>
                       </div>
-
-                      <div className="p-2">
+                      
+                      <div className="p-2 border-b">
                         <button
                           onClick={logout}
-                          className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100"
+                          className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100 text-red-400"
                         >
                           Logout
                         </button>
+                      </div>
+
+                      <div className="p-4 border-b">
+                        <p className="text-xs text-gray-500 break-all mt-1">
+                          {user.user_id}
+                        </p>
                       </div>
                     </div>
                   )}
