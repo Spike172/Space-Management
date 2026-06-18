@@ -42,7 +42,6 @@ def generate_uuid():
 # DATABASE ENGINE
 # =====================================================
 
-# Convert Neon URL to psycopg driver
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace(
         "postgres://",
@@ -122,9 +121,56 @@ class User(Base):
         cascade="all, delete",
     )
 
+    projects = relationship(
+        "Project",
+        back_populates="owner",
+        cascade="all, delete",
+    )
+
     spaces = relationship(
         "Space",
         back_populates="owner",
+        cascade="all, delete",
+    )
+
+# =====================================================
+# PROJECTS TABLE
+# =====================================================
+
+class Project(Base):
+    __tablename__ = "projects"
+
+    id = Column(
+        String,
+        primary_key=True,
+        default=generate_uuid,
+        index=True,
+    )
+
+    name = Column(
+        String,
+        nullable=False,
+    )
+
+    uploaded_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+    )
+
+    user_id = Column(
+        String,
+        ForeignKey("users.id"),
+        nullable=False,
+    )
+
+    owner = relationship(
+        "User",
+        back_populates="projects",
+    )
+
+    spaces = relationship(
+        "Space",
+        back_populates="project",
         cascade="all, delete",
     )
 
@@ -187,32 +233,33 @@ class Space(Base):
         nullable=False,
     )
 
+    project_id = Column(
+        String,
+        ForeignKey("projects.id"),
+        nullable=False,
+    )
+
     owner = relationship(
         "User",
         back_populates="spaces",
     )
 
+    project = relationship(
+        "Project",
+        back_populates="spaces",
+    )
+
     building = Column(String)
     floor = Column(String)
-
     dept_location = Column(String)
-
     room_name = Column(String)
-
     room_number = Column(String)
-
     door_number = Column(String)
-
     occupant = Column(String)
-
     department = Column(String)
-
     department_head = Column(String)
-
     cost_center = Column(String)
-
     shared = Column(String)
-
     area = Column(Float)
 
 # =====================================================
@@ -221,7 +268,6 @@ class Space(Base):
 
 def get_db():
     db = SessionLocal()
-
     try:
         yield db
     finally:

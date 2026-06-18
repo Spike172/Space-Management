@@ -1,8 +1,8 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import Response
 
-from database import init_db, User, Space, get_db
+from database import init_db, User, Project, Space, get_db
 from pydantic import BaseModel
 
 import pandas as pd
@@ -70,13 +70,12 @@ def normalize_columns(df):
     df.columns = [str(c).strip().lower() for c in df.columns]
     return df
 
-def get_user_spaces_df(user_id: str, db: Session) -> pd.DataFrame:
-    """Helper to fetch a user's spaces from the DB and convert to a Pandas DataFrame."""
-    spaces = db.query(Space).filter(Space.user_id == user_id).all()
+def get_project_spaces_df(project_id: str, db: Session) -> pd.DataFrame:
+    """Helper to fetch a specific project's spaces from the DB and convert to a DataFrame."""
+    spaces = db.query(Space).filter(Space.project_id == project_id).all()
     if not spaces:
         return pd.DataFrame()
     
-    # Convert SQLAlchemy objects to dicts, ignoring internal state
     data = [{column.name: getattr(s, column.name) for column in s.__table__.columns} for s in spaces]
     return pd.DataFrame(data)
 
@@ -84,8 +83,8 @@ def get_user_spaces_df(user_id: str, db: Session) -> pd.DataFrame:
 # SUMMARY BUILDERS
 # =====================================================
 
-def department_summary(user_id: str, db: Session):
-    df = get_user_spaces_df(user_id, db)
+def department_summary(project_id: str, db: Session):
+    df = get_project_spaces_df(project_id, db)
     if df.empty:
         return []
 
@@ -99,8 +98,8 @@ def department_summary(user_id: str, db: Session):
     grouped.rename(columns={"department": "name", "area": "value"}, inplace=True)
     return grouped.to_dict(orient="records")
 
-def building_summary(user_id: str, db: Session):
-    df = get_user_spaces_df(user_id, db)
+def building_summary(project_id: str, db: Session):
+    df = get_project_spaces_df(project_id, db)
     if df.empty:
         return []
 
@@ -108,8 +107,8 @@ def building_summary(user_id: str, db: Session):
     grouped.rename(columns={"building": "name", "area": "value"}, inplace=True)
     return grouped.to_dict(orient="records")
 
-def floor_summary(user_id: str, db: Session):
-    df = get_user_spaces_df(user_id, db)
+def floor_summary(project_id: str, db: Session):
+    df = get_project_spaces_df(project_id, db)
     if df.empty:
         return []
 
@@ -117,8 +116,8 @@ def floor_summary(user_id: str, db: Session):
     grouped.rename(columns={"floor": "name", "area": "value"}, inplace=True)
     return grouped.to_dict(orient="records")
 
-def shared_summary(user_id: str, db: Session):
-    df = get_user_spaces_df(user_id, db)
+def shared_summary(project_id: str, db: Session):
+    df = get_project_spaces_df(project_id, db)
     if df.empty:
         return []
 
@@ -126,8 +125,8 @@ def shared_summary(user_id: str, db: Session):
     grouped.rename(columns={"shared": "name", "area": "value"}, inplace=True)
     return grouped.to_dict(orient="records")
 
-def top_rooms(user_id: str, db: Session, limit=10):
-    df = get_user_spaces_df(user_id, db)
+def top_rooms(project_id: str, db: Session, limit=10):
+    df = get_project_spaces_df(project_id, db)
     if df.empty:
         return []
 
@@ -137,6 +136,18 @@ def top_rooms(user_id: str, db: Session, limit=10):
         .head(limit)
         .to_dict(orient="records")
     )
+
+# =====================================================
+# PROJECTS
+# =====================================================
+
+@app.get("/projects")
+def get_projects(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    user_id = current_user["sub"]
+    return db.query(Project).filter(Project.user_id == user_id).order_by(Project.uploaded_at.desc()).all()
 
 # =====================================================
 # UPLOAD
@@ -155,8 +166,13 @@ async def upload_excel(
         rooms_to_insert = []
         user_id = current_user["sub"]
 
-        # Clear existing data for this user to prevent duplicates on re-upload
-        db.query(Space).filter(Space.user_id == user_id).delete()
+        # Create a new Project entry for this specific upload
+        new_project = Project(
+            name=file.filename.rsplit('.', 1)[0], # Remove file extension for cleaner name
+            user_id=user_id
+        )
+        db.add(new_project)
+        db.flush()  # Flushes to state to obtain the new primary key UUID instantly
 
         for sheet_name in workbook.sheet_names:
             if "template" in sheet_name.lower():
@@ -203,9 +219,9 @@ async def upload_excel(
                     if room_number == "" and room_name == "":
                         continue
 
-                    # Create DB model instance
                     new_space = Space(
                         user_id=user_id,
+                        project_id=new_project.id,  # Link room directly to this project
                         building=clean_value(row.get("building"), "Unknown"),
                         floor=str(floor_value),
                         dept_location=dept_location,
@@ -224,12 +240,18 @@ async def upload_excel(
             except Exception as sheet_error:
                 print(f"Sheet {sheet_name} skipped: {sheet_error}")
 
-        # Bulk insert to database
-        db.bulk_save_objects(rooms_to_insert)
-        db.commit()
+        if rooms_to_insert:
+            db.bulk_save_objects(rooms_to_insert)
+            db.commit()
+        else:
+            # If no data found, clean up empty project entry
+            db.delete(new_project)
+            db.commit()
+            raise HTTPException(status_code=400, detail="No rooms could be extracted from Excel structure.")
 
         return {
-            "message": "File processed successfully",
+            "message": "Project created successfully",
+            "project_id": new_project.id,
             "rooms_loaded": len(rooms_to_insert)
         }
 
@@ -238,54 +260,31 @@ async def upload_excel(
         raise HTTPException(status_code=500, detail=str(e))
 
 # =====================================================
-# ROUTES
+# DATA VIEW ROUTES (Project Isolated)
 # =====================================================
-
-@app.get("/")
-def root():
-    return {"status": "online"}
 
 @app.get("/spaces")
 def spaces(
+    project_id: str = Query(...),
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    return db.query(Space).filter(Space.user_id == current_user["sub"]).all()
+    return db.query(Space).filter(
+        Space.user_id == current_user["sub"], 
+        Space.project_id == project_id
+    ).all()
 
 @app.get("/spaces/summary")
-def summary(
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    return department_summary(current_user["sub"], db)
+def summary(project_id: str = Query(...), db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    return department_summary(project_id, db)
 
 @app.get("/spaces/buildings")
-def buildings(
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    return building_summary(current_user["sub"], db)
+def buildings(project_id: str = Query(...), db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    return building_summary(project_id, db)
 
 @app.get("/spaces/floors")
-def floors(
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    return floor_summary(current_user["sub"], db)
-
-@app.get("/spaces/shared")
-def shared(
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    return shared_summary(current_user["sub"], db)
-
-@app.get("/spaces/toprooms")
-def largest_rooms(
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    return top_rooms(current_user["sub"], db)
+def floors(project_id: str = Query(...), db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    return floor_summary(project_id, db)
 
 # =====================================================
 # AUTHENTICATION
@@ -341,22 +340,33 @@ def me(current_user=Depends(get_current_user)):
 
 @app.get("/dashboard")
 def dashboard(
+    project_id: str = None,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     user_id = current_user["sub"]
-    df = get_user_spaces_df(user_id, db)
+
+    # Fallback default: If no project specified, pull the latest one uploaded by user
+    if not project_id:
+        latest_project = db.query(Project).filter(Project.user_id == user_id).order_by(Project.uploaded_at.desc()).first()
+        if not latest_project:
+            return {
+                "total_area": 0, "total_rooms": 0, "total_departments": 0, "total_buildings": 0,
+                "area": 0, "top_departments": [], "buildings": [], "floors": [], "top_rooms": []
+            }
+        project_id = latest_project.id
+
+    # Verify authorization access to targeted project ID
+    project_check = db.query(Project).filter(Project.id == project_id, Project.user_id == user_id).first()
+    if not project_check:
+        raise HTTPException(status_code=403, detail="Unauthorized project access.")
+
+    df = get_project_spaces_df(project_id, db)
 
     if df.empty:
         return {
-            "total_area": 0,
-            "total_rooms": 0,
-            "total_departments": 0,
-            "total_buildings": 0,
-            "top_departments": [],
-            "buildings": [],
-            "floors": [],
-            "top_rooms": []
+            "total_area": 0, "total_rooms": 0, "total_departments": 0, "total_buildings": 0,
+            "area": 0, "top_departments": [], "buildings": [], "floors": [], "top_rooms": []
         }
 
     total_area = float(df["area"].sum())
@@ -370,8 +380,8 @@ def dashboard(
         "total_rooms": total_rooms,
         "total_departments": int(total_departments),
         "total_buildings": int(total_buildings),
-        "top_departments": department_summary(user_id, db)[:10],
-        "buildings": building_summary(user_id, db),
-        "floors": floor_summary(user_id, db),
-        "top_rooms": top_rooms(user_id, db, 10)
+        "top_departments": department_summary(project_id, db)[:10],
+        "buildings": building_summary(project_id, db),
+        "floors": floor_summary(project_id, db),
+        "top_rooms": top_rooms(project_id, db, 10)
     }
