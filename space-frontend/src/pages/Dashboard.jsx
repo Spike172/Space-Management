@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+// src/pages/Dashboard.jsx
+
+import { useEffect, useState, useMemo } from "react";
 import {
   Tooltip,
   ResponsiveContainer,
@@ -14,6 +16,8 @@ export default function Dashboard() {
   const [projects, setProjects] = useState([]);
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [stats, setStats] = useState(null);
+  const [rooms, setRooms] = useState([]);
+  const [selectedBuilding, setSelectedBuilding] = useState("");
   const [loading, setLoading] = useState(true);
 
   // 1. On component mount, load the list of projects
@@ -21,24 +25,25 @@ export default function Dashboard() {
     loadProjects();
   }, []);
 
-  // 2. Whenever the selected project changes, load its dashboard stats
+  // 2. Whenever the selected project changes, load its dashboard statistics and space records
   useEffect(() => {
     if (selectedProjectId) {
-      loadDashboard(selectedProjectId);
+      loadDashboardData(selectedProjectId);
     } else {
       setStats(null);
+      setRooms([]);
+      setSelectedBuilding("");
     }
   }, [selectedProjectId]);
 
   const loadProjects = async () => {
     try {
       setLoading(true);
-      // Assumes you create a backend route: GET /projects
       const res = await api.get("/projects"); 
-      setProjects(res.data);
+      setProjects(res.data || []);
       
       // Auto-select the first project if available
-      if (res.data.length > 0) {
+      if (res.data && res.data.length > 0) {
         setSelectedProjectId(res.data[0].id);
       } else {
         setLoading(false);
@@ -49,23 +54,71 @@ export default function Dashboard() {
     }
   };
 
-  const loadDashboard = async (projectId) => {
+  const loadDashboardData = async (projectId) => {
     try {
       setLoading(true);
-      // Assumes you update backend to accept project_id query parameter
-      const res = await api.get(`/dashboard?project_id=${projectId}`);
-      setStats(res.data);
+      
+      // Fetch both the general aggregated stats and raw items concurrently
+      const [statsRes, spacesRes] = await Promise.all([
+        api.get(`/dashboard?project_id=${projectId}`),
+        api.get(`/spaces?project_id=${projectId}`)
+      ]);
+
+      setStats(statsRes.data);
+      const roomsData = spacesRes.data || [];
+      setRooms(roomsData);
+
+      // Extract unique buildings and default the selection to the first building if found
+      const bldgs = Array.from(new Set(roomsData.map((r) => r.building))).filter(Boolean).sort();
+      if (bldgs.length > 0) {
+        setSelectedBuilding(bldgs[0]); // Default to the first building to avoid initial jumbling
+      } else {
+        setSelectedBuilding("");
+      }
     } catch (err) {
-      console.error("Failed to load dashboard:", err);
+      console.error("Failed to load dashboard metrics:", err);
     } finally {
       setLoading(false);
     }
   };
 
-  if (loading && !stats) {
+  // Extract unique sorted building values for the dropdown filter
+  const uniqueBuildings = useMemo(() => {
+    const bldgs = Array.from(new Set(rooms.map((r) => r.building))).filter(Boolean);
+    return bldgs.sort();
+  }, [rooms]);
+
+  // Dynamically compute the isolated floor dataset for the active building selection
+  const floorChartData = useMemo(() => {
+    const filteredRooms = selectedBuilding
+      ? rooms.filter((r) => r.building === selectedBuilding)
+      : rooms;
+
+    const floorMap = {};
+    filteredRooms.forEach((room) => {
+      const floorName = room.floor || "Unknown";
+      floorMap[floorName] = (floorMap[floorName] || 0) + (room.area || 0);
+    });
+
+    return Object.keys(floorMap)
+      .map((floor) => ({
+        name: floor,
+        value: floorMap[floor],
+      }))
+      .sort((a, b) => {
+        const numA = parseFloat(a.name);
+        const numB = parseFloat(b.name);
+        if (!isNaN(numA) && !isNaN(numB)) {
+          return numA - numB;
+        }
+        return a.name.localeCompare(b.name);
+      });
+  }, [rooms, selectedBuilding]);
+
+  if (loading && projects.length === 0) {
     return (
       <div className="bg-white p-8 rounded-2xl shadow-md">
-        Loading dashboard...
+        Loading dashboard analytics...
       </div>
     );
   }
@@ -73,11 +126,11 @@ export default function Dashboard() {
   if (projects.length === 0) {
     return (
       <div className="bg-white p-8 rounded-2xl shadow-md">
-        <h2 className="text-2xl font-semibold mb-4">Dashboard</h2>
+        <h1 className="text-2xl font-bold mb-4">Dashboard</h1>
         <div className="border border-dashed border-gray-300 rounded-xl p-8 text-center">
-          <p className="text-gray-500">No projects found.</p>
+          <p className="text-gray-500">No active project environments found.</p>
           <p className="text-sm text-gray-400 mt-2">
-            Go to the Upload page to create your first project.
+            Please go to the Upload section to instantiate an isolated project workspace.
           </p>
         </div>
       </div>
@@ -86,19 +139,22 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Project Selector Header */}
-      <div className="bg-white p-6 rounded-2xl shadow flex items-center justify-between">
-        <h2 className="text-2xl font-semibold">Dashboard Overview</h2>
+      {/* Project Selector Bar */}
+      <div className="bg-white p-6 rounded-2xl shadow flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">Workspace Dashboard</h1>
+          <p className="text-gray-500 text-sm">Real-time macro space allocation metrics.</p>
+        </div>
         
-        <div className="flex items-center gap-3">
-          <label htmlFor="project-select" className="text-sm font-medium text-gray-700">
-            Select Project:
+        <div className="flex items-center gap-3 w-full md:w-auto">
+          <label htmlFor="project-select" className="text-sm font-medium text-gray-700 whitespace-nowrap">
+            Active Project:
           </label>
           <select
             id="project-select"
             value={selectedProjectId}
             onChange={(e) => setSelectedProjectId(e.target.value)}
-            className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-64 p-2.5"
+            className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full md:w-64 p-2.5"
           >
             {projects.map((proj) => (
               <option key={proj.id} value={proj.id}>
@@ -109,140 +165,134 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {!stats || stats.total_rooms === 0 ? (
-        <div className="bg-white p-8 rounded-2xl shadow-md">
-          <div className="border border-dashed border-gray-300 rounded-xl p-8 text-center">
-            <p className="text-gray-500">This project has no space data.</p>
-            <p className="text-sm text-gray-400 mt-2">
-              Upload a file to populate this project's inventory.
-            </p>
-          </div>
-        </div>
-      ) : (
+      {stats && (
         <>
-          {/* KPI Cards */}
-          <div className="grid md:grid-cols-4 gap-4">
+          {/* Summary Metric Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div className="bg-white p-6 rounded-2xl shadow">
-              <p className="text-gray-500 text-sm">Total Area</p>
-              <h2 className="text-3xl font-bold">
-                {Math.round(stats.area).toLocaleString()}
-              </h2>
-              <p className="text-gray-500">sq ft</p>
+              <p className="text-sm text-gray-500 font-medium">Total Gross Area</p>
+              <p className="text-3xl font-bold text-gray-900 mt-2">
+                {Math.round(stats.total_area || 0).toLocaleString()}{" "}
+                <span className="text-sm font-normal text-gray-400">sq ft</span>
+              </p>
             </div>
 
             <div className="bg-white p-6 rounded-2xl shadow">
-              <p className="text-gray-500 text-sm">Rooms</p>
-              <h2 className="text-3xl font-bold">
-                {stats.total_rooms.toLocaleString()}
-              </h2>
+              <p className="text-sm text-gray-500 font-medium">Total Audited Rooms</p>
+              <p className="text-3xl font-bold text-gray-900 mt-2">
+                {(stats.total_rooms || 0).toLocaleString()}
+              </p>
             </div>
 
             <div className="bg-white p-6 rounded-2xl shadow">
-              <p className="text-gray-500 text-sm">Departments</p>
-              <h2 className="text-3xl font-bold">
-                {stats.total_departments.toLocaleString()}
-              </h2>
+              <p className="text-sm text-gray-500 font-medium">Unique Departments</p>
+              <p className="text-3xl font-bold text-gray-900 mt-2">
+                {(stats.total_departments || 0).toLocaleString()}
+              </p>
             </div>
 
             <div className="bg-white p-6 rounded-2xl shadow">
-              <p className="text-gray-500 text-sm">Buildings</p>
-              <h2 className="text-3xl font-bold">
-                {stats.total_buildings.toLocaleString()}
-              </h2>
+              <p className="text-sm text-gray-500 font-medium">Total Buildings</p>
+              <p className="text-3xl font-bold text-gray-900 mt-2">
+                {(stats.total_buildings || 0).toLocaleString()}
+              </p>
             </div>
           </div>
 
-          {/* Top Departments */}
-          <div className="bg-white p-6 rounded-2xl shadow">
-            <h2 className="text-xl font-semibold mb-4">Top Departments by Area</h2>
-            <table className="w-full">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left p-2">Department</th>
-                  <th className="text-right p-2">Area</th>
-                </tr>
-              </thead>
-              <tbody>
-                {stats.top_departments.map((dept) => (
-                  <tr key={dept.name} className="border-b">
-                    <td className="p-2">{dept.name}</td>
-                    <td className="p-2 text-right">
-                      {Math.round(dept.value).toLocaleString()}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Buildings */}
-          {stats.buildings.length > 1 ? (
+          {/* Charts Allocation Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Area by Department */}
             <div className="bg-white p-6 rounded-2xl shadow">
-              <h2 className="text-xl font-semibold mb-4">Area by Building</h2>
-              <div className="h-[400px]">
+              <h2 className="text-xl font-semibold mb-4">Area by Department</h2>
+              <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={stats.buildings}>
+                  <BarChart data={stats.top_departments || []}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="name" />
                     <YAxis />
-                    <Tooltip />
-                    <Bar dataKey="value" fill="#6B7280" />
+                    <Tooltip formatter={(value) => `${Math.round(value).toLocaleString()} sq ft`} />
+                    <Bar dataKey="value" fill="#3B82F6" />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             </div>
-          ) : (
-            <div className="bg-white p-6 rounded-2xl shadow">
-              <h2 className="text-xl font-semibold mb-2">Building Summary</h2>
-              <p className="text-gray-500">Uploaded inventory contains one building:</p>
-              <p className="text-2xl font-bold mt-2">{stats.buildings[0]?.name}</p>
-              <p className="text-gray-600">
-                {Math.round(stats.buildings[0]?.value || 0).toLocaleString()} sq ft
-              </p>
-            </div>
-          )}
 
-          {/* Floors */}
-          <div className="bg-white p-6 rounded-2xl shadow">
-            <h2 className="text-xl font-semibold mb-4">Area by Floor</h2>
-            <div className="h-[400px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={stats.floors}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis />
-                  <Tooltip />
-                  <Bar dataKey="value" fill="#4B5563" />
-                </BarChart>
-              </ResponsiveContainer>
+            {/* Area by Floor with Building Dropdown Filter */}
+            <div className="bg-white p-6 rounded-2xl shadow flex flex-col">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+                <h2 className="text-xl font-semibold">Area by Floor</h2>
+                
+                <div className="flex items-center gap-2">
+                  <label htmlFor="building-select" className="text-xs font-medium text-gray-500 whitespace-nowrap">
+                    Filter Building:
+                  </label>
+                  <select
+                    id="building-select"
+                    value={selectedBuilding}
+                    onChange={(e) => setSelectedBuilding(e.target.value)}
+                    className="bg-gray-50 border border-gray-300 text-gray-900 text-xs rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-1.5 font-medium"
+                  >
+                    <option value="">All Buildings Combined</option>
+                    {uniqueBuildings.map((bldg) => (
+                      <option key={bldg} value={bldg}>
+                        {bldg}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="h-64">
+                {floorChartData.length === 0 ? (
+                  <div className="h-full flex items-center justify-center text-gray-400 text-sm border border-dashed border-gray-200 rounded-xl">
+                    No floor space dataset found for this building selection.
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={floorChartData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" />
+                      <YAxis />
+                      <Tooltip formatter={(value) => `${Math.round(value).toLocaleString()} sq ft`} />
+                      <Bar dataKey="value" fill="#4B5563" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
             </div>
           </div>
 
-          {/* Largest Rooms */}
+          {/* Largest Rooms Table */}
           <div className="bg-white p-6 rounded-2xl shadow">
             <h2 className="text-xl font-semibold mb-4">Largest Rooms</h2>
-            <table className="w-full">
-              <thead>
-                <tr className="border-b">
-                  <th className="p-2 text-left">Room</th>
-                  <th className="p-2 text-left">Department</th>
-                  <th className="p-2 text-left">Floor</th>
-                  <th className="p-2 text-right">Area</th>
-                </tr>
-              </thead>
-              <tbody>
-                {stats.top_rooms.map((room, idx) => (
-                  <tr key={idx} className="border-b">
-                    <td className="p-2">{room.room_name}</td>
-                    <td className="p-2">{room.department}</td>
-                    <td className="p-2">{room.floor}</td>
-                    <td className="p-2 text-right">
-                      {Math.round(room.area).toLocaleString()}
-                    </td>
+            <div className="overflow-x-auto border border-gray-100 rounded-xl">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200 text-gray-700 text-left">
+                    <th className="p-3">Building</th>
+                    <th className="p-3">Room Name / Number</th>
+                    <th className="p-3">Department</th>
+                    <th className="p-3">Floor</th>
+                    <th className="p-3 text-right">Area</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {stats.top_rooms && stats.top_rooms.map((room, idx) => (
+                    <tr key={idx} className="border-b border-gray-100 hover:bg-gray-50 transition">
+                      <td className="p-3 font-medium text-gray-900">{room.building || "—"}</td>
+                      <td className="p-3 text-gray-700">
+                        {room.room_name} {room.room_number ? `(#${room.room_number})` : ""}
+                      </td>
+                      <td className="p-3 text-gray-600">{room.department}</td>
+                      <td className="p-3 text-gray-600">{room.floor}</td>
+                      <td className="p-3 text-right font-mono text-gray-900">
+                        {Math.round(room.area).toLocaleString()} sq ft
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </>
       )}
