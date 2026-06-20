@@ -61,17 +61,17 @@ def parse_int(value, default=0):
     if pd.isna(value) or value is None:
         return default
     try:
-        # Converts floats like 2.0 or strings like " 2 " cleanly to integer 2
+        # Safely converts floats like 2.0 or strings like " 2 " to integer 2
         return int(float(str(value).strip()))
     except (ValueError, TypeError):
         return default
 
 def find_header_row(df_raw):
-    """Find row containing SQ FT header."""
+    """Find row containing SQ FT or Area header."""
     for idx, row in df_raw.iterrows():
         values = [str(v).strip().lower() for v in row.values if pd.notna(v)]
         joined = " ".join(values)
-        if "sq ft" in joined:
+        if "sq ft" in joined or "area" in joined:
             return idx
     return 0
 
@@ -169,39 +169,47 @@ async def upload_excel(
                 df = df.loc[:, ~df.columns.str.startswith("unnamed")]
                 df = df.dropna(how="all")
 
-                if "sq ft" not in df.columns:
-                    continue
-
-                # 1. Global cleanup for placeholder '?' marks and empty spaces
+                # 1. Global cleanup for placeholder marks and empty spaces
                 df = df.replace(r'^\?+$', None, regex=True)
                 df = df.replace(r'^\s*$', None, regex=True)
 
-                # 2. Forward fill Building and Wing Location
-                if "building" in df.columns:
-                    df["building"] = df["building"].ffill()
-                if "wing location" in df.columns:
-                    df["wing location"] = df["wing location"].ffill()
-
-                df["sq ft"] = pd.to_numeric(df["sq ft"], errors="coerce")
-                df = df.dropna(subset=["sq ft"])
-
-                # Find exact workstation column keys dynamically
+                # 2. Dynamically search for core columns (handles variations like 'Bldg' or 'Wing Loc')
+                bldg_col = next((c for c in df.columns if c in ['building', 'bldg'] or 'build' in c), None)
+                wing_col = next((c for c in df.columns if 'wing' in c), None)
+                sqft_col = next((c for c in df.columns if 'sq ft' in c or 'area' in c), None)
+                
                 ws_col = next((c for c in df.columns if 'workstation' in c and 'empty' not in c and 'vacant' not in c), None)
                 empty_ws_col = next((c for c in df.columns if 'workstation' in c and ('empty' in c or 'vacant' in c)), None)
 
-                for _, row in df.iterrows():
-                    department = clean_value(row.get("department"))
-                    dept_location = clean_value(row.get("dept location"))
-                    department = department or dept_location or "Unassigned"
+                if not sqft_col:
+                    continue
 
-                    # --- WING LOGIC ---
-                    raw_bldg = clean_value(row.get("building"), sheet_name)
-                    wing_loc = clean_value(row.get("wing location", ""))
+                # 3. Forward fill identified building and wing columns
+                if bldg_col: df[bldg_col] = df[bldg_col].ffill()
+                if wing_col: df[wing_col] = df[wing_col].ffill()
+
+                df[sqft_col] = pd.to_numeric(df[sqft_col], errors="coerce")
+                df = df.dropna(subset=[sqft_col])
+
+                for _, row in df.iterrows():
+                    # --- DYNAMIC WING & BUILDING LOGIC ---
+                    bldg_val = row.get(bldg_col) if bldg_col else row.get("building")
+                    raw_bldg = clean_value(bldg_val)
+                    if not raw_bldg: 
+                        raw_bldg = sheet_name
+
+                    wing_val = row.get(wing_col) if wing_col else row.get("wing location")
+                    wing_loc = clean_value(wing_val)
 
                     if raw_bldg.upper() == "WING" and wing_loc:
                         final_bldg = f"WING {wing_loc.upper()}"
                     else:
                         final_bldg = raw_bldg
+
+                    # --- REMAINING MAPPING ---
+                    department = clean_value(row.get("department"))
+                    dept_location = clean_value(row.get("dept location"))
+                    department = department or dept_location or "Unassigned"
 
                     floor_value = row.get("level #")
                     if pd.notna(floor_value):
@@ -222,7 +230,7 @@ async def upload_excel(
                     new_space = Space(
                         user_id=user_id,
                         project_id=new_project.id,  
-                        building=final_bldg, # Utilizes the formatted Wing name
+                        building=final_bldg, 
                         floor=str(floor_value),
                         dept_location=dept_location,
                         room_name=room_name,
@@ -233,7 +241,7 @@ async def upload_excel(
                         department_head=clean_value(row.get("department head")),
                         cost_center=clean_value(row.get("cost center")),
                         shared=clean_value(row.get("shared"), "N"),
-                        area=float(row.get("sq ft", 0)),
+                        area=float(row.get(sqft_col, 0)),
                         workstations=parse_int(row.get(ws_col) if ws_col else 0),
                         empty_workstations=parse_int(row.get(empty_ws_col) if empty_ws_col else 0)
                     )
