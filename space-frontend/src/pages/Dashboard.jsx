@@ -303,8 +303,8 @@ export default function Dashboard() {
                       data={stats.buildings || []}
                       cx="50%"
                       cy="50%"
-                      labelLine={true}
-                      label={({ name, percent }) => `${name} (${(percent * 100).toFixed(1)}%)`}
+                      labelLine={(entry) => entry.percent >= 0.1}
+                      label={({ name, percent }) => percent >= 0.1 ? `${name} (${(percent * 100).toFixed(1)}%)` : ""}
                       outerRadius={100}
                       dataKey="value"
                     >
