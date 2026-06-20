@@ -9,8 +9,24 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
 } from "recharts";
 import api from "../api/apiClient";
+
+// Modern professional color palette for pie chart slices
+const COLORS = [
+  "#3B82F6", // Blue
+  "#6366F1", // Indigo
+  "#10B981", // Emerald
+  "#F59E0B", // Amber
+  "#EF4444", // Red
+  "#8B5CF6", // Violet
+  "#EC4899", // Pink
+  "#4B5563", // Gray
+];
 
 export default function Dashboard() {
   const [projects, setProjects] = useState([]);
@@ -259,6 +275,32 @@ export default function Dashboard() {
                   </ResponsiveContainer>
                 )}
               </div>
+            </div>
+          </div>
+
+          {/* Standalone Full-Width Area by Building Pie Chart Panel */}
+          <div className="bg-white p-6 rounded-2xl shadow">
+            <h2 className="text-xl font-semibold mb-4">Area by Building Breakdown</h2>
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={stats.buildings || []}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={true}
+                    label={({ name, percent }) => `${name} (${(percent * 100).toFixed(1)}%)`}
+                    outerRadius={100}
+                    dataKey="value"
+                  >
+                    {(stats.buildings || []).map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value) => `${Math.round(value).toLocaleString()} sq ft`} />
+                  <Legend verticalAlign="bottom" height={36} />
+                </PieChart>
+              </ResponsiveContainer>
             </div>
           </div>
 
