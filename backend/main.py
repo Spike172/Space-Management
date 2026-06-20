@@ -50,10 +50,10 @@ class LoginRequest(BaseModel):
 # =====================================================
 
 def clean_value(value, default=""):
-    if pd.isna(value):
+    if pd.isna(value) or value is None:
         return default
     value = str(value).strip()
-    if value.lower() == "nan":
+    if value.lower() == "nan" or value == "":
         return default
     return value
 
@@ -201,6 +201,22 @@ async def upload_excel(
                 if "sq ft" not in df.columns:
                     continue
 
+                # --- NEW GLOBAL CLEANUP ---
+                # 1. Replace literal "?", "??", "???" with proper None values globally
+                df = df.replace(r'^\?+$', None, regex=True)
+                # 2. Replace empty strings or pure whitespace with None globally
+                df = df.replace(r'^\s*$', None, regex=True)
+
+                # --- FIX: BUILDING IDENTIFICATION ---
+                if "building" in df.columns:
+                    # Forward-fill gaps (inherits from the row above)
+                    df["building"] = df["building"].ffill()
+                    # If the very first rows are missing, fallback to the sheet name
+                    df["building"] = df["building"].fillna(sheet_name)
+                else:
+                    # If column doesn't exist at all, use the sheet tab name
+                    df["building"] = sheet_name
+
                 df["sq ft"] = pd.to_numeric(df["sq ft"], errors="coerce")
                 df = df.dropna(subset=["sq ft"])
 
@@ -231,8 +247,8 @@ async def upload_excel(
 
                     new_space = Space(
                         user_id=user_id,
-                        project_id=new_project.id,  # Link room directly to this project
-                        building=clean_value(row.get("building"), "Unknown"),
+                        project_id=new_project.id,  
+                        building=clean_value(row.get("building"), sheet_name),
                         floor=str(floor_value),
                         dept_location=dept_location,
                         room_name=room_name,
@@ -254,7 +270,6 @@ async def upload_excel(
             db.bulk_save_objects(rooms_to_insert)
             db.commit()
         else:
-            # Clean up empty project entry if parsing yielded nothing
             db.delete(new_project)
             db.commit()
             raise HTTPException(status_code=400, detail="No rooms could be extracted from Excel structure.")
@@ -357,7 +372,6 @@ def dashboard(
 ):
     user_id = current_user["sub"]
 
-    # Fallback default: If no project specified, pull the latest one uploaded by user
     if not project_id:
         latest_project = db.query(Project).filter(Project.user_id == user_id).order_by(Project.uploaded_at.desc()).first()
         if not latest_project:
@@ -367,7 +381,6 @@ def dashboard(
             }
         project_id = latest_project.id
 
-    # Verify authorization access to targeted project ID
     project_check = db.query(Project).filter(Project.id == project_id, Project.user_id == user_id).first()
     if not project_check:
         raise HTTPException(status_code=403, detail="Unauthorized project access.")
