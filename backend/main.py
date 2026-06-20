@@ -57,6 +57,15 @@ def clean_value(value, default=""):
         return default
     return value
 
+def parse_int(value, default=0):
+    if pd.isna(value) or value is None:
+        return default
+    try:
+        # Converts floats like 2.0 or strings like " 2 " cleanly to integer 2
+        return int(float(str(value).strip()))
+    except (ValueError, TypeError):
+        return default
+
 def find_header_row(df_raw):
     """Find row containing SQ FT header."""
     for idx, row in df_raw.iterrows():
@@ -71,11 +80,9 @@ def normalize_columns(df):
     return df
 
 def get_project_spaces_df(project_id: str, db: Session) -> pd.DataFrame:
-    """Helper to fetch a specific project's spaces from the DB and convert to a DataFrame."""
     spaces = db.query(Space).filter(Space.project_id == project_id).all()
     if not spaces:
         return pd.DataFrame()
-    
     data = [{column.name: getattr(s, column.name) for column in s.__table__.columns} for s in spaces]
     return pd.DataFrame(data)
 
@@ -85,67 +92,38 @@ def get_project_spaces_df(project_id: str, db: Session) -> pd.DataFrame:
 
 def department_summary(project_id: str, db: Session):
     df = get_project_spaces_df(project_id, db)
-    if df.empty:
-        return []
-
+    if df.empty: return []
     df = df[(df["department"] != "") & (df["department"] != "Unassigned")]
-    grouped = (
-        df.groupby("department")["area"]
-        .sum()
-        .reset_index()
-        .sort_values("area", ascending=False)
-    )
+    grouped = df.groupby("department")["area"].sum().reset_index().sort_values("area", ascending=False)
     grouped.rename(columns={"department": "name", "area": "value"}, inplace=True)
     return grouped.to_dict(orient="records")
 
 def building_summary(project_id: str, db: Session):
     df = get_project_spaces_df(project_id, db)
-    if df.empty:
-        return []
-
+    if df.empty: return []
     grouped = df.groupby("building")["area"].sum().reset_index()
     grouped.rename(columns={"building": "name", "area": "value"}, inplace=True)
     return grouped.to_dict(orient="records")
 
 def floor_summary(project_id: str, db: Session):
     df = get_project_spaces_df(project_id, db)
-    if df.empty:
-        return []
-
+    if df.empty: return []
     grouped = df.groupby("floor")["area"].sum().reset_index()
     grouped.rename(columns={"floor": "name", "area": "value"}, inplace=True)
     return grouped.to_dict(orient="records")
 
-def shared_summary(project_id: str, db: Session):
-    df = get_project_spaces_df(project_id, db)
-    if df.empty:
-        return []
-
-    grouped = df.groupby("shared")["area"].sum().reset_index()
-    grouped.rename(columns={"shared": "name", "area": "value"}, inplace=True)
-    return grouped.to_dict(orient="records")
-
 def top_rooms(project_id: str, db: Session, limit=10):
     df = get_project_spaces_df(project_id, db)
-    if df.empty:
-        return []
-
+    if df.empty: return []
     df = df.sort_values("area", ascending=False)
-    return (
-        df[["room_name", "department", "building", "floor", "area"]]
-        .head(limit)
-        .to_dict(orient="records")
-    )
+    return df[["room_name", "department", "building", "floor", "area"]].head(limit).to_dict(orient="records")
 
 # =====================================================
 # PROJECTS
 # =====================================================
 
 @app.get("/projects")
-def get_projects(
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
+def get_projects(current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
     user_id = current_user["sub"]
     return db.query(Project).filter(Project.user_id == user_id).order_by(Project.uploaded_at.desc()).all()
 
@@ -166,23 +144,16 @@ async def upload_excel(
         rooms_to_insert = []
         user_id = current_user["sub"]
 
-        # Extract base name without the file extension
         base_name = file.filename.rsplit('.', 1)[0] if '.' in file.filename else file.filename
-        
-        # Check if project name already exists for this user and append incrementing suffix
         project_name = base_name
         counter = 1
         while db.query(Project).filter(Project.user_id == user_id, Project.name == project_name).first() is not None:
             project_name = f"{base_name} ({counter})"
             counter += 1
 
-        # Create a unique Project entry for this specific upload
-        new_project = Project(
-            name=project_name,
-            user_id=user_id
-        )
+        new_project = Project(name=project_name, user_id=user_id)
         db.add(new_project)
-        db.flush()  # Obtains the new primary key UUID instantly
+        db.flush()
 
         for sheet_name in workbook.sheet_names:
             if "template" in sheet_name.lower():
@@ -201,33 +172,36 @@ async def upload_excel(
                 if "sq ft" not in df.columns:
                     continue
 
-                # --- NEW GLOBAL CLEANUP ---
-                # 1. Replace literal "?", "??", "???" with proper None values globally
+                # 1. Global cleanup for placeholder '?' marks and empty spaces
                 df = df.replace(r'^\?+$', None, regex=True)
-                # 2. Replace empty strings or pure whitespace with None globally
                 df = df.replace(r'^\s*$', None, regex=True)
 
-                # --- FIX: BUILDING IDENTIFICATION ---
+                # 2. Forward fill Building and Wing Location
                 if "building" in df.columns:
-                    # Forward-fill gaps (inherits from the row above)
                     df["building"] = df["building"].ffill()
-                    # If the very first rows are missing, fallback to the sheet name
-                    df["building"] = df["building"].fillna(sheet_name)
-                else:
-                    # If column doesn't exist at all, use the sheet tab name
-                    df["building"] = sheet_name
+                if "wing location" in df.columns:
+                    df["wing location"] = df["wing location"].ffill()
 
                 df["sq ft"] = pd.to_numeric(df["sq ft"], errors="coerce")
                 df = df.dropna(subset=["sq ft"])
 
+                # Find exact workstation column keys dynamically
+                ws_col = next((c for c in df.columns if 'workstation' in c and 'empty' not in c and 'vacant' not in c), None)
+                empty_ws_col = next((c for c in df.columns if 'workstation' in c and ('empty' in c or 'vacant' in c)), None)
+
                 for _, row in df.iterrows():
                     department = clean_value(row.get("department"))
                     dept_location = clean_value(row.get("dept location"))
+                    department = department or dept_location or "Unassigned"
 
-                    if not department:
-                        department = dept_location
-                    if not department:
-                        department = "Unassigned"
+                    # --- WING LOGIC ---
+                    raw_bldg = clean_value(row.get("building"), sheet_name)
+                    wing_loc = clean_value(row.get("wing location", ""))
+
+                    if raw_bldg.upper() == "WING" and wing_loc:
+                        final_bldg = f"WING {wing_loc.upper()}"
+                    else:
+                        final_bldg = raw_bldg
 
                     floor_value = row.get("level #")
                     if pd.notna(floor_value):
@@ -248,7 +222,7 @@ async def upload_excel(
                     new_space = Space(
                         user_id=user_id,
                         project_id=new_project.id,  
-                        building=clean_value(row.get("building"), sheet_name),
+                        building=final_bldg, # Utilizes the formatted Wing name
                         floor=str(floor_value),
                         dept_location=dept_location,
                         room_name=room_name,
@@ -259,7 +233,9 @@ async def upload_excel(
                         department_head=clean_value(row.get("department head")),
                         cost_center=clean_value(row.get("cost center")),
                         shared=clean_value(row.get("shared"), "N"),
-                        area=float(row.get("sq ft", 0))
+                        area=float(row.get("sq ft", 0)),
+                        workstations=parse_int(row.get(ws_col) if ws_col else 0),
+                        empty_workstations=parse_int(row.get(empty_ws_col) if empty_ws_col else 0)
                     )
                     rooms_to_insert.append(new_space)
 
@@ -290,15 +266,8 @@ async def upload_excel(
 # =====================================================
 
 @app.get("/spaces")
-def spaces(
-    project_id: str = Query(...),
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    return db.query(Space).filter(
-        Space.user_id == current_user["sub"], 
-        Space.project_id == project_id
-    ).all()
+def spaces(project_id: str = Query(...), current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    return db.query(Space).filter(Space.user_id == current_user["sub"], Space.project_id == project_id).all()
 
 @app.get("/spaces/summary")
 def summary(project_id: str = Query(...), db: Session = Depends(get_db), current_user = Depends(get_current_user)):
@@ -319,42 +288,20 @@ def floors(project_id: str = Query(...), db: Session = Depends(get_db), current_
 @app.post("/register")
 def register(request: RegisterRequest, db: Session = Depends(get_db)):
     existing_user = db.query(User).filter(User.username == request.username).first()
-    if existing_user:
-        raise HTTPException(status_code=400, detail="Username already exists")
-
-    user = User(
-        username=request.username,
-        email=request.email,
-        password_hash=hash_password(request.password)
-    )
-
+    if existing_user: raise HTTPException(status_code=400, detail="Username already exists")
+    user = User(username=request.username, email=request.email, password_hash=hash_password(request.password))
     db.add(user)
     db.commit()
     db.refresh(user)
-
     return {"message": "User created", "user_id": user.id}
 
 @app.post("/login")
 def login(request: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == request.username).first()
-
     if not user or not verify_password(request.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    
-    token = create_access_token(
-        {
-            "sub": str(user.id),
-            "username": user.username,
-        }
-    )
-
-    return {
-        "message": "Login successful",
-        "access_token": token,
-        "token_type": "bearer",
-        "user_id": user.id,
-        "username": user.username
-    }
+    token = create_access_token({"sub": str(user.id), "username": user.username})
+    return {"message": "Login successful", "access_token": token, "token_type": "bearer", "user_id": user.id, "username": user.username}
 
 @app.get("/me")
 def me(current_user=Depends(get_current_user)):
@@ -365,33 +312,20 @@ def me(current_user=Depends(get_current_user)):
 # =====================================================
 
 @app.get("/dashboard")
-def dashboard(
-    project_id: str = None,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
+def dashboard(project_id: str = None, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
     user_id = current_user["sub"]
 
     if not project_id:
         latest_project = db.query(Project).filter(Project.user_id == user_id).order_by(Project.uploaded_at.desc()).first()
-        if not latest_project:
-            return {
-                "total_area": 0, "total_rooms": 0, "total_departments": 0, "total_buildings": 0,
-                "area": 0, "top_departments": [], "buildings": [], "floors": [], "top_rooms": []
-            }
+        if not latest_project: return {"total_area": 0, "total_rooms": 0, "total_departments": 0, "total_buildings": 0, "area": 0, "top_departments": [], "buildings": [], "floors": [], "top_rooms": []}
         project_id = latest_project.id
 
     project_check = db.query(Project).filter(Project.id == project_id, Project.user_id == user_id).first()
-    if not project_check:
-        raise HTTPException(status_code=403, detail="Unauthorized project access.")
+    if not project_check: raise HTTPException(status_code=403, detail="Unauthorized project access.")
 
     df = get_project_spaces_df(project_id, db)
 
-    if df.empty:
-        return {
-            "total_area": 0, "total_rooms": 0, "total_departments": 0, "total_buildings": 0,
-            "area": 0, "top_departments": [], "buildings": [], "floors": [], "top_rooms": []
-        }
+    if df.empty: return {"total_area": 0, "total_rooms": 0, "total_departments": 0, "total_buildings": 0, "area": 0, "top_departments": [], "buildings": [], "floors": [], "top_rooms": []}
 
     total_area = float(df["area"].sum())
     total_rooms = len(df)

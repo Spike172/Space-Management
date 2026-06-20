@@ -34,7 +34,6 @@ if not DATABASE_URL:
 # GENERATE NEW UUIDs
 # =====================================================
 
-
 def generate_uuid():
     return str(uuid.uuid4())
 
@@ -84,54 +83,14 @@ Base = declarative_base()
 class User(Base):
     __tablename__ = "users"
 
-    id = Column(
-        String,
-        primary_key=True,
-        default=generate_uuid,
-        index=True,
-    )
+    id = Column(String, primary_key=True, default=generate_uuid, index=True)
+    username = Column(String, unique=True, nullable=False, index=True)
+    email = Column(String, unique=True, nullable=False, index=True)
+    password_hash = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
-    username = Column(
-        String,
-        unique=True,
-        nullable=False,
-        index=True,
-    )
-
-    email = Column(
-        String,
-        unique=True,
-        nullable=False,
-        index=True,
-    )
-
-    password_hash = Column(
-        String,
-        nullable=False,
-    )
-
-    created_at = Column(
-        DateTime,
-        default=datetime.utcnow,
-    )
-
-    uploads = relationship(
-        "Upload",
-        back_populates="owner",
-        cascade="all, delete",
-    )
-
-    projects = relationship(
-        "Project",
-        back_populates="owner",
-        cascade="all, delete",
-    )
-
-    spaces = relationship(
-        "Space",
-        back_populates="owner",
-        cascade="all, delete",
-    )
+    projects = relationship("Project", back_populates="owner", cascade="all, delete")
+    spaces = relationship("Space", back_populates="owner", cascade="all, delete")
 
 # =====================================================
 # PROJECTS TABLE
@@ -140,79 +99,13 @@ class User(Base):
 class Project(Base):
     __tablename__ = "projects"
 
-    id = Column(
-        String,
-        primary_key=True,
-        default=generate_uuid,
-        index=True,
-    )
+    id = Column(String, primary_key=True, default=generate_uuid, index=True)
+    name = Column(String, nullable=False)
+    uploaded_at = Column(DateTime, default=datetime.utcnow)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
 
-    name = Column(
-        String,
-        nullable=False,
-    )
-
-    uploaded_at = Column(
-        DateTime,
-        default=datetime.utcnow,
-    )
-
-    user_id = Column(
-        String,
-        ForeignKey("users.id"),
-        nullable=False,
-    )
-
-    owner = relationship(
-        "User",
-        back_populates="projects",
-    )
-
-    spaces = relationship(
-        "Space",
-        back_populates="project",
-        cascade="all, delete",
-    )
-
-# =====================================================
-# UPLOADS TABLE
-# =====================================================
-
-class Upload(Base):
-    __tablename__ = "uploads"
-
-    id = Column(
-        String,
-        primary_key=True,
-        default=generate_uuid,
-        index=True,
-    )
-
-    filename = Column(
-        String,
-        nullable=False,
-    )
-
-    file_type = Column(
-        String,
-        nullable=False,
-    )
-
-    uploaded_at = Column(
-        DateTime,
-        default=datetime.utcnow,
-    )
-
-    user_id = Column(
-        String,
-        ForeignKey("users.id"),
-        nullable=True,
-    )
-
-    owner = relationship(
-        "User",
-        back_populates="uploads",
-    )
+    owner = relationship("User", back_populates="projects")
+    spaces = relationship("Space", back_populates="project", cascade="all, delete")
 
 # =====================================================
 # SPACE INVENTORY TABLE
@@ -221,33 +114,12 @@ class Upload(Base):
 class Space(Base):
     __tablename__ = "spaces"
 
-    id = Column(
-        Integer,
-        primary_key=True,
-        index=True,
-    )
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    project_id = Column(String, ForeignKey("projects.id"), nullable=False)
 
-    user_id = Column(
-        String,
-        ForeignKey("users.id"),
-        nullable=False,
-    )
-
-    project_id = Column(
-        String,
-        ForeignKey("projects.id"),
-        nullable=False,
-    )
-
-    owner = relationship(
-        "User",
-        back_populates="spaces",
-    )
-
-    project = relationship(
-        "Project",
-        back_populates="spaces",
-    )
+    owner = relationship("User", back_populates="spaces")
+    project = relationship("Project", back_populates="spaces")
 
     building = Column(String)
     floor = Column(String)
@@ -261,6 +133,10 @@ class Space(Base):
     cost_center = Column(String)
     shared = Column(String)
     area = Column(Float)
+    
+    # --- NEW COLUMNS ---
+    workstations = Column(Integer, default=0)
+    empty_workstations = Column(Integer, default=0)
 
 # =====================================================
 # DATABASE DEPENDENCY
