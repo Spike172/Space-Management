@@ -166,13 +166,23 @@ async def upload_excel(
         rooms_to_insert = []
         user_id = current_user["sub"]
 
-        # Create a new Project entry for this specific upload
+        # Extract base name without the file extension
+        base_name = file.filename.rsplit('.', 1)[0] if '.' in file.filename else file.filename
+        
+        # Check if project name already exists for this user and append incrementing suffix
+        project_name = base_name
+        counter = 1
+        while db.query(Project).filter(Project.user_id == user_id, Project.name == project_name).first() is not None:
+            project_name = f"{base_name} ({counter})"
+            counter += 1
+
+        # Create a unique Project entry for this specific upload
         new_project = Project(
-            name=file.filename.rsplit('.', 1)[0], # Remove file extension for cleaner name
+            name=project_name,
             user_id=user_id
         )
         db.add(new_project)
-        db.flush()  # Flushes to state to obtain the new primary key UUID instantly
+        db.flush()  # Obtains the new primary key UUID instantly
 
         for sheet_name in workbook.sheet_names:
             if "template" in sheet_name.lower():
@@ -244,13 +254,14 @@ async def upload_excel(
             db.bulk_save_objects(rooms_to_insert)
             db.commit()
         else:
-            # If no data found, clean up empty project entry
+            # Clean up empty project entry if parsing yielded nothing
             db.delete(new_project)
             db.commit()
             raise HTTPException(status_code=400, detail="No rooms could be extracted from Excel structure.")
 
         return {
             "message": "Project created successfully",
+            "project_name": new_project.name,
             "project_id": new_project.id,
             "rooms_loaded": len(rooms_to_insert)
         }
