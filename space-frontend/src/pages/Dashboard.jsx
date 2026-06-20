@@ -278,30 +278,46 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Standalone Full-Width Area by Building Pie Chart Panel */}
+          {/* Standalone Full-Width Area by Building Panel */}
           <div className="bg-white p-6 rounded-2xl shadow">
             <h2 className="text-xl font-semibold mb-4">Area by Building Breakdown</h2>
-            <div className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={stats.buildings || []}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={true}
-                    label={({ name, percent }) => `${name} (${(percent * 100).toFixed(1)}%)`}
-                    outerRadius={100}
-                    dataKey="value"
-                  >
-                    {(stats.buildings || []).map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(value) => `${Math.round(value).toLocaleString()} sq ft`} />
-                  <Legend verticalAlign="bottom" height={36} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
+            
+            {/* Conditional handling for single-building environments */}
+            {stats.buildings && stats.buildings.length === 1 ? (
+              <div className="flex flex-col items-center justify-center py-12 bg-gray-50 rounded-xl border border-dashed border-gray-200 text-center">
+                <p className="text-gray-400 font-medium text-xs sm:text-sm uppercase tracking-wider">
+                  there is only one building in this project
+                </p>
+                <p className="text-2xl sm:text-3xl font-extrabold text-gray-900 mt-2">
+                  {stats.buildings[0].name || "Unnamed Building"}
+                </p>
+                <p className="text-lg sm:text-xl font-semibold text-blue-600 mt-1">
+                  {Math.round(stats.buildings[0].value || 0).toLocaleString()} sq ft
+                </p>
+              </div>
+            ) : (
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={stats.buildings || []}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={true}
+                      label={({ name, percent }) => `${name} (${(percent * 100).toFixed(1)}%)`}
+                      outerRadius={100}
+                      dataKey="value"
+                    >
+                      {(stats.buildings || []).map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(value) => `${Math.round(value).toLocaleString()} sq ft`} />
+                    <Legend verticalAlign="bottom" height={36} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            )}
           </div>
 
           {/* Largest Rooms Table */}
